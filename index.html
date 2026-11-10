@@ -33,6 +33,7 @@
   --up:#ff6f64; --down:#6fa3ff; color-scheme:dark;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.55;
   padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .wrap{max-width:1180px;margin:0 auto}
@@ -132,6 +133,7 @@ td.mono{font-family:var(--mono);font-size:12px}
           <div class="field"><label for="cur">통화</label>
             <select id="cur"><option value="KRW">원 (KRW)</option><option value="USD">달러 (USD)</option></select></div>
         </div>
+        <div class="field" id="savedWrap" hidden><label for="saved">저장된 종목 (매일 자동 갱신)</label><select id="saved"></select></div>
         <div class="btns">
           <label class="filebtn">CSV 불러오기<input type="file" id="file" accept=".csv,.txt,text/csv"></label>
           <button type="button" id="useSample">예시 데이터</button>
@@ -226,6 +228,9 @@ function normDate(s){
   if ((m = s.match(/^(\d{4})\D+(\d{1,2})\D+(\d{1,2})/))) return m[1] + '-' + pad2(m[2]) + '-' + pad2(m[3]);
   if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) return m[1] + '-' + m[2] + '-' + m[3];
   if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) return m[3] + '-' + pad2(m[1]) + '-' + pad2(m[2]);
+  var MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  if ((m = s.match(/^([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})/)) && MON[m[1].slice(0, 3).toLowerCase()]) return m[3] + '-' + pad2(MON[m[1].slice(0, 3).toLowerCase()]) + '-' + pad2(m[2]);
+  if ((m = s.match(/^(\d{1,2})\s+([A-Za-z]{3,9})\.?,?\s+(\d{4})/)) && MON[m[2].slice(0, 3).toLowerCase()]) return m[3] + '-' + pad2(MON[m[2].slice(0, 3).toLowerCase()]) + '-' + pad2(m[1]);
   return null;
 }
 
@@ -664,6 +669,30 @@ if (typeof module !== 'undefined') module.exports = { backtest: backtest, sweep:
   });
   var rt = null;
   window.addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(function(){ if (LAST) render(); }, 150); });
+
+  /* 저장소의 data/ 폴더에 자동 수집된 종목이 있으면 선택 목록을 보여 줌 */
+  function loadSavedList(){
+    if (!window.fetch) return;
+    fetch('data/index.json').then(function(r){ if (!r.ok) throw new Error('no index'); return r.json(); }).then(function(list){
+      if (!Array.isArray(list) || !list.length) return;
+      var sel = $('saved');
+      sel.innerHTML = '<option value="">종목 선택...</option>' + list.map(function(e, i){
+        return '<option value="' + i + '">' + esc(e.t) + ' (' + e.first + ' ~ ' + e.last + ')</option>';
+      }).join('');
+      $('savedWrap').hidden = false;
+      sel.addEventListener('change', function(){
+        var e = list[parseInt(sel.value, 10)];
+        if (!e) return;
+        $('err').textContent = '';
+        fetch('data/' + encodeURIComponent(e.file)).then(function(r){ if (!r.ok) throw new Error('파일을 찾지 못했습니다: ' + e.file); return r.text(); }).then(function(txt){
+          var c = /\.(KS|KQ)$/i.test(e.t) ? 'KRW' : 'USD';
+          if ($('cur').value !== c){ $('cur').value = c; $('cur').dispatchEvent(new Event('change')); }
+          loadText(txt, e.t);
+        }).catch(function(er){ $('err').textContent = er.message; });
+      });
+    }).catch(function(){ /* data 폴더가 없으면 목록을 숨긴 채로 둠 */ });
+  }
+  loadSavedList();
 
   setData(sampleData(), '예시 종목', true, '');
 })();
