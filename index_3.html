@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>분할매수 백테스터</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#1f5f4f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="백테스터">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: 왼쪽 조건 패널(고정폭) + 오른쪽 결과. 폰에서는 한 열로 쌓임 */
+:root{
+  --bg:#f2f4f2; --surface:#ffffff; --fg:#1a1f1c; --muted:#5b665f; --line:#dde2de;
+  --accent:#1f5f4f; --accent-fg:#ffffff; --chip:#e9eeea;
+  --up:#d12f2f; --down:#2a62c9;
+  --font:'Noto Sans KR',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111412; --surface:#1a1e1b; --fg:#e8ece9; --muted:#9aa59e; --line:#2a302c;
+    --accent:#5cb89f; --accent-fg:#0c1411; --chip:#232925;
+    --up:#ff6f64; --down:#6fa3ff; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111412; --surface:#1a1e1b; --fg:#e8ece9; --muted:#9aa59e; --line:#2a302c;
+  --accent:#5cb89f; --accent-fg:#0c1411; --chip:#232925;
+  --up:#ff6f64; --down:#6fa3ff; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.55;
+  padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-bottom:20px}
+h1{font-size:22px;line-height:1.25;margin:0;font-weight:700;letter-spacing:-.01em}
+header p{margin:0;color:var(--muted);font-size:13px}
+.app{display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:880px){.app{grid-template-columns:minmax(0,1fr)}}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:18px}
+.group{display:flex;flex-direction:column;gap:10px;min-width:0}
+.group+.group{border-top:1px solid var(--line);padding-top:16px}
+.group h2{margin:0;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label,.lab{font-size:12px;color:var(--muted)}
+input[type=text],input[type=number],input[type=date],select,textarea{
+  width:100%;min-width:0;font:inherit;font-size:14px;color:var(--fg);background:var(--bg);
+  border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+input[type=number],.num{font-family:var(--mono);font-size:13px}
+textarea{font-family:var(--mono);font-size:12px;min-height:84px;resize:vertical}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible,.hm td.cell:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.check{display:flex;gap:8px;align-items:center;font-size:13px}
+.check input{width:16px;height:16px;accent-color:var(--accent)}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button,.filebtn{font:inherit;font-size:13px;font-weight:500;border-radius:6px;padding:7px 12px;cursor:pointer;border:1px solid var(--line);background:var(--chip);color:var(--fg)}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.filebtn input{position:absolute;opacity:0;width:1px;height:1px}
+.filebtn:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.hint.warn{color:var(--up)}
+details summary{cursor:pointer;font-size:12px;color:var(--muted)}
+details textarea{margin-top:8px}
+.msg{font-size:12.5px;color:var(--down);min-height:1.2em;margin:0}
+
+.out{display:flex;flex-direction:column;gap:28px;min-width:0}
+.sample-note{background:var(--chip);border-radius:8px;padding:8px 12px;font-size:12.5px;color:var(--muted)}
+.headline{display:flex;flex-direction:column;gap:6px}
+.headline .lab{letter-spacing:.04em}
+.big{font-family:var(--mono);font-size:34px;line-height:1.15;font-weight:500;letter-spacing:-.02em;overflow-wrap:anywhere}
+.up{color:var(--up)} .down{color:var(--down)}
+.sub{color:var(--muted);font-size:13px}
+.sub b{color:var(--fg);font-weight:500}
+dl.kpi{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0 28px;margin:0}
+dl.kpi div{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);min-width:0}
+dl.kpi dt{color:var(--muted);font-size:13px}
+dl.kpi dd{margin:0;font-family:var(--mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+section h3{margin:0 0 2px;font-size:15px;font-weight:700}
+section>p.hint{margin-bottom:10px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--muted);margin-bottom:6px}
+.legend i{display:inline-block;width:14px;height:0;border-top:2px solid;vertical-align:middle;margin-right:6px}
+.readout{font-family:var(--mono);font-size:12px;color:var(--muted);min-height:1.5em;margin-bottom:4px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.chart{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 0 0;min-width:0}
+.chart svg{display:block;width:100%;height:auto}
+.grid{stroke:var(--line);stroke-width:1}
+.zero{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+.ax{fill:var(--muted);font:11px var(--mono)}
+.hov{stroke:var(--muted);stroke-width:1}
+.hit{fill:transparent;touch-action:pan-y}
+.l-price{stroke:var(--fg);fill:none;stroke-width:1.4}
+.l-strat{stroke:var(--accent);fill:none;stroke-width:2}
+.l-bh{stroke:var(--muted);fill:none;stroke-width:1.5;stroke-dasharray:5 4}
+.m-buy{fill:var(--up)} .m-sell{fill:var(--down)}
+.scroll{overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:6px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+th{font-weight:500;color:var(--muted);font-size:12px;background:var(--surface);position:sticky;top:0}
+td:first-child,th:first-child,td.l,th.l{text-align:left}
+td.mono{font-family:var(--mono);font-size:12px}
+.log{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.tag{display:inline-block;padding:0 7px;border-radius:99px;font-size:11.5px;font-weight:500;background:var(--chip)}
+.tag.b{color:var(--up)} .tag.s{color:var(--down)}
+.hm{width:auto;min-width:0}
+.hm td.cell{--hue:var(--up);--a:0%;font-family:var(--mono);text-align:center;cursor:pointer;min-width:74px;
+  background:color-mix(in srgb,var(--hue) var(--a),var(--surface))}
+.hm td.cell.neg{--hue:var(--down)}
+.hm td.cell.cur{outline:2px solid var(--fg);outline-offset:-2px}
+.hm th.axis{background:transparent;position:static;color:var(--muted)}
+.notes{margin:0;padding-left:18px;color:var(--muted);font-size:12.5px}
+.notes li+li{margin-top:3px}
+.empty{padding:28px 0;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){button{transition:filter .12s}button:hover{filter:brightness(.96)}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>분할매수 백테스터</h1>
+    <p>종목 CSV에 분할매수·매도 규칙을 적용했을 때의 결과를 계산합니다.</p>
+  </header>
+
+  <div class="app">
+    <form class="panel" id="form" onsubmit="return false">
+      <div class="group">
+        <h2>종목과 데이터</h2>
+        <div class="row">
+          <div class="field"><label for="ticker">종목명 / 티커</label><input type="text" id="ticker" value="예시 종목"></div>
+          <div class="field"><label for="cur">통화</label>
+            <select id="cur"><option value="KRW">원 (KRW)</option><option value="USD">달러 (USD)</option></select></div>
+        </div>
+        <div class="btns">
+          <label class="filebtn">CSV 불러오기<input type="file" id="file" accept=".csv,.txt,text/csv"></label>
+          <button type="button" id="useSample">예시 데이터</button>
+        </div>
+        <details>
+          <summary>CSV 붙여넣기</summary>
+          <textarea id="paste" placeholder="Date,Close&#10;2024-01-02,71000&#10;..."></textarea>
+          <div class="btns" style="margin-top:8px"><button type="button" id="usePaste">붙여넣은 데이터 사용</button></div>
+        </details>
+        <p class="hint" id="dataInfo"></p>
+        <p class="hint">야후 파이낸스, 인베스팅닷컴, 증권사에서 내보낸 일봉 CSV를 읽습니다. 날짜와 종가 열이 필요하고, 수정종가(Adj Close)가 있으면 그 열을 씁니다.</p>
+        <p class="msg" id="err" role="alert"></p>
+        <div class="row">
+          <div class="field"><label for="start">시작일</label><input type="date" id="start"></div>
+          <div class="field"><label for="end">종료일</label><input type="date" id="end"></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>매수 조건</h2>
+        <div class="row">
+          <div class="field"><label for="buyPct">하락률 (%)</label><input type="number" id="buyPct" value="5" min="0.1" max="90" step="any" inputmode="decimal"></div>
+          <div class="field"><label for="amount">회당 매수 금액</label><input type="number" id="amount" value="1000000" min="1" step="any" inputmode="decimal"></div>
+        </div>
+        <div class="field"><label for="buyRef">하락 기준</label>
+          <select id="buyRef">
+            <option value="lastBuy">직전 매수가 대비</option>
+            <option value="prevClose">전일 종가 대비</option>
+            <option value="peak">직전 매수 이후 고점 대비</option>
+          </select></div>
+        <div class="row">
+          <div class="field"><label for="maxLots">최대 차수</label><input type="number" id="maxLots" value="10" min="1" max="200" step="1" inputmode="numeric"></div>
+          <div class="field"><label for="budget">총 투자 한도 (0=무제한)</label><input type="number" id="budget" value="0" min="0" step="any" inputmode="decimal"></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>매도 조건</h2>
+        <div class="field"><label for="sellPct">상승률 (%)</label><input type="number" id="sellPct" value="10" min="0.1" max="500" step="any" inputmode="decimal"></div>
+        <div class="field"><label for="sellRef">상승 기준</label>
+          <select id="sellRef">
+            <option value="avg">평단 대비 (전량 매도)</option>
+            <option value="lot">차수별 매수가 대비 (해당 차수만 매도)</option>
+          </select></div>
+      </div>
+
+      <div class="group">
+        <h2>비용</h2>
+        <div class="field"><label for="fee">매매 수수료 (편도 %)</label><input type="number" id="fee" value="0.05" min="0" max="5" step="any" inputmode="decimal"></div>
+        <label class="check"><input type="checkbox" id="frac"> 소수점 매수 허용</label>
+        <p class="hint">끄면 회당 금액으로 살 수 있는 정수 주수만 매수합니다.</p>
+      </div>
+    </form>
+
+    <main class="out" id="out" aria-live="polite"></main>
+  </div>
+</div>
+
+<script>
+/* ===== 백테스트 엔진 (순수 함수) ===== */
+function pad2(x){ x = String(x); return x.length < 2 ? '0' + x : x; }
+function isoDate(d){ return d.toISOString().slice(0, 10); }
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* 예시용 가상 시계열 (실제 종목 데이터가 아님) */
+function sampleData(){
+  var r = mulberry32(20261110), p = 50000, rows = [];
+  var d = new Date(Date.UTC(2021, 0, 4));
+  for (var k = 0; k < 1300; k++){
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d = new Date(d.getTime() + 864e5);
+    var u1 = r() || 1e-9, u2 = r();
+    var z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    var mu = 0.00005 + 0.0014 * Math.sin(k / 170);
+    p *= Math.exp(mu + 0.016 * z);
+    rows.push({ d: isoDate(d), c: Math.max(10, Math.round(p / 10) * 10) });
+    d = new Date(d.getTime() + 864e5);
+  }
+  return rows;
+}
+
+function normDate(s){
+  s = String(s == null ? '' : s).replace(/"/g, '').trim();
+  var m;
+  if ((m = s.match(/^(\d{4})\D+(\d{1,2})\D+(\d{1,2})/))) return m[1] + '-' + pad2(m[2]) + '-' + pad2(m[3]);
+  if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) return m[1] + '-' + m[2] + '-' + m[3];
+  if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) return m[3] + '-' + pad2(m[1]) + '-' + pad2(m[2]);
+  return null;
+}
+
+function splitLine(l, delim){
+  var out = [], cur = '', q = false;
+  for (var i = 0; i < l.length; i++){
+    var ch = l[i];
+    if (ch === '"'){
+      if (q && l[i + 1] === '"'){ cur += '"'; i++; } else q = !q;
+    } else if (ch === delim && !q){ out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out.map(function(s){ return s.trim(); });
+}
+
+function toNum(s){
+  var v = parseFloat(String(s).replace(/[,\s$₩원]/g, ''));
+  return isFinite(v) ? v : NaN;
+}
+
+/* CSV → {rows:[{d,c}], colName} */
+function parseCSV(text){
+  text = String(text).replace(/^﻿/, '').trim();
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
+  if (lines.length < 3) throw new Error('데이터 행이 너무 적습니다. 날짜와 종가 열이 있는 CSV를 올려 주세요.');
+  var best = ',', bestN = 0;
+  [',', '\t', ';'].forEach(function(ch){
+    var n = splitLine(lines[0], ch).length;
+    if (n > bestN){ bestN = n; best = ch; }
+  });
+  var first = splitLine(lines[0], best);
+  var hasHeader = !first.some(function(x){ return normDate(x); });
+  var dateCol = 0, closeCol = -1, colName = '';
+  if (hasHeader){
+    var head = first.map(function(s){ return s.toLowerCase(); });
+    var di = head.findIndex(function(h){ return /date|날짜|일자|일시|time/.test(h); });
+    if (di >= 0) dateCol = di;
+    var ai = head.findIndex(function(h){ return /adj|수정/.test(h); });
+    var ci = head.findIndex(function(h){ return /^close|종가|현재가|마감|^price|^종가/.test(h) && !/adj|수정/.test(h); });
+    if (ai >= 0){ closeCol = ai; colName = first[ai]; }
+    else if (ci >= 0){ closeCol = ci; colName = first[ci]; }
+  }
+  if (closeCol < 0){
+    closeCol = first.length >= 5 ? 4 : 1;
+    colName = hasHeader ? (first[closeCol] || '') : (closeCol + 1) + '번째 열';
+  }
+  var rows = [];
+  for (var i = hasHeader ? 1 : 0; i < lines.length; i++){
+    var cells = splitLine(lines[i], best);
+    var d = normDate(cells[dateCol]), c = toNum(cells[closeCol]);
+    if (d && isFinite(c) && c > 0) rows.push({ d: d, c: c });
+  }
+  rows.sort(function(a, b){ return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
+  var dedup = [];
+  rows.forEach(function(r){
+    if (dedup.length && dedup[dedup.length - 1].d === r.d) dedup[dedup.length - 1] = r; else dedup.push(r);
+  });
+  if (dedup.length < 20) throw new Error('읽을 수 있는 행이 ' + dedup.length + '개뿐입니다. 열 이름(Date, Close 등)을 확인해 주세요.');
+  return { rows: dedup, colName: colName };
+}
+
+function dayDiff(a, b){
+  var pa = a.split('-'), pb = b.split('-');
+  return (Date.UTC(+pb[0], +pb[1] - 1, +pb[2]) - Date.UTC(+pa[0], +pa[1] - 1, +pa[2])) / 864e5;
+}
+
+/*
+ o = {buyPct, sellPct, buyRef:'lastBuy'|'prevClose'|'peak', sellRef:'avg'|'lot',
+      amount, maxLots, budget(0=무제한), feePct, fractional}
+*/
+function backtest(rows, o){
+  var EPS = 1e-9, fee = (o.feePct || 0) / 100;
+  var lots = [], realized = 0, invested = 0, maxInvested = 0, maxLotsHeld = 0;
+  var blockedDays = 0, nBuy = 0, nSell = 0, peak = null;
+  var trades = [], curve = [];
+
+  for (var i = 0; i < rows.length; i++){
+    var c = rows[i].c, d = rows[i].d, sold = false, k, l, pnl, proceeds;
+
+    if (lots.length){
+      if (o.sellRef === 'avg'){
+        var sh = 0, val = 0, cost = 0;
+        for (k = 0; k < lots.length; k++){ sh += lots[k].sh; val += lots[k].sh * lots[k].p; cost += lots[k].cost; }
+        var avg = val / sh;
+        if (c >= avg * (1 + o.sellPct / 100) - EPS){
+          proceeds = sh * c * (1 - fee);
+          pnl = proceeds - cost;
+          realized += pnl; invested -= cost; nSell++; sold = true;
+          trades.push({ i: i, d: d, side: 'S', p: c, sh: sh, amt: sh * c, pnl: pnl, note: lots.length + '차수 전량 (평단 ' + avg.toFixed(2) + ')' });
+          lots = [];
+        }
+      } else {
+        var keep = [];
+        for (k = 0; k < lots.length; k++){
+          l = lots[k];
+          if (c >= l.p * (1 + o.sellPct / 100) - EPS){
+            proceeds = l.sh * c * (1 - fee);
+            pnl = proceeds - l.cost;
+            realized += pnl; invested -= l.cost; nSell++; sold = true;
+            trades.push({ i: i, d: d, side: 'S', p: c, sh: l.sh, amt: l.sh * c, pnl: pnl, note: l.n + '차수 매수가 ' + l.p });
+          } else keep.push(l);
+        }
+        lots = keep;
+      }
+    }
+
+    if (lots.length) peak = peak == null ? c : Math.max(peak, c); else peak = null;
+
+    if (!sold){
+      var trigger = false;
+      if (!lots.length) trigger = true;
+      else {
+        var ref = null;
+        if (o.buyRef === 'lastBuy') ref = lots[lots.length - 1].p;
+        else if (o.buyRef === 'prevClose') ref = i > 0 ? rows[i - 1].c : null;
+        else ref = peak;
+        if (ref != null && c <= ref * (1 - o.buyPct / 100) + EPS) trigger = true;
+      }
+      if (trigger){
+        var qty = o.fractional ? o.amount / c : Math.floor(o.amount / c);
+        var capOK = lots.length < o.maxLots;
+        var budgetOK = !o.budget || invested + o.amount * (1 + fee) <= o.budget + EPS;
+        if (capOK && budgetOK && qty > 0){
+          var bc = qty * c * (1 + fee);
+          lots.push({ sh: qty, p: c, cost: bc, n: lots.length + 1 });
+          invested += bc; nBuy++; peak = c;
+          if (invested > maxInvested) maxInvested = invested;
+          if (lots.length > maxLotsHeld) maxLotsHeld = lots.length;
+          trades.push({ i: i, d: d, side: 'B', p: c, sh: qty, amt: qty * c, pnl: null, note: lots.length + '차수' });
+        } else blockedDays++;
+      }
+    }
+
+    var mv = 0, shs = 0;
+    for (k = 0; k < lots.length; k++){ mv += lots[k].sh * c; shs += lots[k].sh; }
+    curve.push({ d: d, c: c, pnl: realized + (mv - invested), inv: invested, n: lots.length });
+  }
+
+  var last = curve[curve.length - 1];
+  var base = maxInvested > 0 ? maxInvested : 1;
+  var bh = curve.map(function(r){ return base * (r.c / rows[0].c - 1); });
+
+  var peakPnl = -Infinity, mdd = 0, minPnl = 0;
+  curve.forEach(function(r){
+    if (r.pnl > peakPnl) peakPnl = r.pnl;
+    if (peakPnl - r.pnl > mdd) mdd = peakPnl - r.pnl;
+    if (r.pnl < minPnl) minPnl = r.pnl;
+  });
+
+  var totalPnl = last.pnl, retPct = totalPnl / base * 100;
+  var years = dayDiff(rows[0].d, rows[rows.length - 1].d) / 365.25;
+  var cagr = (years >= 0.25 && 1 + retPct / 100 > 0) ? (Math.pow(1 + retPct / 100, 1 / years) - 1) * 100 : null;
+  var openSh = 0, openVal = 0;
+  lots.forEach(function(x){ openSh += x.sh; openVal += x.sh * x.p; });
+
+  return {
+    trades: trades, curve: curve, bh: bh,
+    totalPnl: totalPnl, realized: realized, unrealized: totalPnl - realized,
+    maxInvested: maxInvested, retPct: retPct, cagr: cagr, years: years,
+    mdd: mdd, mddPct: mdd / base * 100, minPnl: minPnl, minPnlPct: minPnl / base * 100,
+    bhPnl: bh[bh.length - 1], bhPct: (rows[rows.length - 1].c / rows[0].c - 1) * 100,
+    nBuy: nBuy, nSell: nSell, blockedDays: blockedDays, maxLotsHeld: maxLotsHeld,
+    openLots: lots.length, openAvg: openSh ? openVal / openSh : null, openInvested: invested
+  };
+}
+
+function sweep(rows, o, buyList, sellList){
+  return buyList.map(function(b){
+    return sellList.map(function(s){
+      var r = backtest(rows, Object.assign({}, o, { buyPct: b, sellPct: s }));
+      return { b: b, s: s, ret: r.retPct, pnl: r.totalPnl, inv: r.maxInvested };
+    });
+  });
+}
+
+if (typeof module !== 'undefined') module.exports = { backtest: backtest, sweep: sweep, parseCSV: parseCSV, sampleData: sampleData, normDate: normDate };
+
+</script>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var DATA = [], SAMPLE = true, COLNAME = '', timer = null, CUR = 'KRW';
+  var DEFAULTS = { KRW: { amount: 1000000, fee: 0.05 }, USD: { amount: 1000, fee: 0.25 } };
+
+  function money(n, sign){
+    var s = n < 0 ? '-' : (sign && n > 0 ? '+' : '');
+    var a = Math.abs(n);
+    if (CUR === 'USD') return s + '$' + a.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    return s + Math.round(a).toLocaleString('ko-KR') + '원';
+  }
+  function price(n){
+    if (CUR === 'USD') return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return Math.round(n * 100) / 100 > 1000 ? Math.round(n).toLocaleString('ko-KR') : n.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+  }
+  function axisMoney(n){
+    var a = Math.abs(n), s = n < 0 ? '-' : '';
+    if (CUR === 'USD'){
+      if (a >= 1e6) return s + '$' + (a / 1e6).toFixed(a >= 1e7 ? 0 : 1) + 'M';
+      if (a >= 1e3) return s + '$' + (a / 1e3).toFixed(a >= 1e4 ? 0 : 1) + 'K';
+      return s + '$' + a;
+    }
+    if (a >= 1e8) return s + (a / 1e8).toFixed(a >= 1e9 ? 0 : 1) + '억';
+    if (a >= 1e4) return s + Math.round(a / 1e4).toLocaleString('ko-KR') + '만';
+    return s + a.toLocaleString('ko-KR');
+  }
+  function axisPrice(n){
+    if (CUR === 'USD') return '$' + (n >= 100 ? Math.round(n) : n.toFixed(1));
+    return n >= 1e4 ? Math.round(n / 1e3).toLocaleString('ko-KR') + '천' : Math.round(n).toLocaleString('ko-KR');
+  }
+  function pct(n, sign){ return (sign && n > 0 ? '+' : '') + n.toFixed(1) + '%'; }
+  function cls(n){ return n > 0 ? 'up' : n < 0 ? 'down' : ''; }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function readParams(){
+    var o = {
+      buyPct: parseFloat($('buyPct').value), sellPct: parseFloat($('sellPct').value),
+      buyRef: $('buyRef').value, sellRef: $('sellRef').value,
+      amount: parseFloat($('amount').value), maxLots: parseInt($('maxLots').value, 10),
+      budget: parseFloat($('budget').value) || 0, feePct: parseFloat($('fee').value) || 0,
+      fractional: $('frac').checked
+    };
+    if (!(o.buyPct > 0) || !(o.sellPct > 0)) return { error: '하락률과 상승률은 0보다 커야 합니다.' };
+    if (o.buyPct >= 100) return { error: '하락률은 100% 미만으로 입력해 주세요.' };
+    if (!(o.amount > 0)) return { error: '회당 매수 금액을 입력해 주세요.' };
+    if (!(o.maxLots >= 1)) return { error: '최대 차수는 1 이상이어야 합니다.' };
+    return { o: o };
+  }
+
+  function slice(){
+    var s = $('start').value, e = $('end').value;
+    return DATA.filter(function(r){ return (!s || r.d >= s) && (!e || r.d <= e); });
+  }
+
+  /* ---------- 차트 ---------- */
+  function niceTicks(lo, hi, n){
+    if (lo === hi){ lo -= 1; hi += 1; }
+    var step0 = (hi - lo) / n, mag = Math.pow(10, Math.floor(Math.log10(step0))), norm = step0 / mag;
+    var step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
+    var out = [], v = Math.floor(lo / step) * step;
+    for (; v <= hi + step * 0.5; v += step) out.push(+v.toFixed(10));
+    return out;
+  }
+
+  function drawChart(host, o){
+    var W = Math.max(280, host.clientWidth || 600), H = o.h || 260, ml = o.ml || 54, mr = 12, mt = 10, mb = 24;
+    var n = o.dates.length, lo = Infinity, hi = -Infinity, i;
+    o.series.forEach(function(s){ s.vals.forEach(function(v){ if (v < lo) lo = v; if (v > hi) hi = v; }); });
+    if (o.zero){ lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+    var ticks = niceTicks(lo, hi, 4), y0 = ticks[0], y1 = ticks[ticks.length - 1];
+    var X = function(k){ return ml + (W - ml - mr) * (n < 2 ? 0 : k / (n - 1)); };
+    var Y = function(v){ return mt + (H - mt - mb) * (1 - (v - y0) / ((y1 - y0) || 1)); };
+    var g = '';
+    ticks.forEach(function(t){
+      g += '<line class="grid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(t).toFixed(1) + '" y2="' + Y(t).toFixed(1) + '"/>' +
+           '<text class="ax" x="' + (ml - 6) + '" y="' + (Y(t) + 4).toFixed(1) + '" text-anchor="end">' + o.yfmt(t) + '</text>';
+    });
+    var xt = Math.min(5, n);
+    for (var k = 0; k < xt; k++){
+      i = Math.round((n - 1) * k / ((xt - 1) || 1));
+      g += '<text class="ax" x="' + X(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="' + (k === 0 ? 'start' : k === xt - 1 ? 'end' : 'middle') + '">' + o.dates[i].slice(0, 7) + '</text>';
+    }
+    if (o.zero) g += '<line class="zero" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(0).toFixed(1) + '" y2="' + Y(0).toFixed(1) + '"/>';
+    o.series.forEach(function(s){
+      var d = '';
+      for (var j = 0; j < n; j++) d += (j ? 'L' : 'M') + X(j).toFixed(1) + ' ' + Y(s.vals[j]).toFixed(1);
+      g += '<path class="' + s.cls + '" d="' + d + '"/>';
+    });
+    if (o.markers){
+      var r = o.markers.length > 250 ? 2.6 : 4;
+      o.markers.forEach(function(m){
+        var x = X(m.i), y = Y(m.v);
+        if (m.side === 'B') g += '<path class="m-buy" d="M' + x.toFixed(1) + ' ' + (y - r - 1).toFixed(1) + 'l' + r + ' ' + (r * 1.7).toFixed(1) + 'h-' + (r * 2) + 'z"/>';
+        else g += '<path class="m-sell" d="M' + x.toFixed(1) + ' ' + (y + r + 1).toFixed(1) + 'l' + r + ' -' + (r * 1.7).toFixed(1) + 'h-' + (r * 2) + 'z"/>';
+      });
+    }
+    g += '<line class="hov" id="' + o.id + 'L" y1="' + mt + '" y2="' + (H - mb) + '" x1="0" x2="0" style="display:none"/>';
+    g += '<rect class="hit" x="' + ml + '" y="' + mt + '" width="' + (W - ml - mr) + '" height="' + (H - mt - mb) + '"/>';
+    host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="' + esc(o.label) + '">' + g + '</svg>';
+    var svg = host.firstChild, hit = svg.querySelector('.hit'), line = svg.querySelector('.hov');
+    function at(ev){
+      var b = svg.getBoundingClientRect(), x = (ev.clientX - b.left) * (W / b.width);
+      var idx = Math.round((x - ml) / (W - ml - mr) * (n - 1));
+      idx = Math.max(0, Math.min(n - 1, idx));
+      line.setAttribute('x1', X(idx)); line.setAttribute('x2', X(idx)); line.style.display = '';
+      o.onHover(idx);
+    }
+    hit.addEventListener('pointermove', at);
+    hit.addEventListener('pointerdown', at);
+    hit.addEventListener('pointerleave', function(){ line.style.display = 'none'; o.onHover(null); });
+    o.onHover(null);
+  }
+
+  /* ---------- 결과 렌더 ---------- */
+  var LAST = null;
+
+  function render(){
+    var out = $('out'), err = $('err');
+    err.textContent = '';
+    var pr = readParams();
+    if (pr.error){ err.textContent = pr.error; return; }
+    var rows = slice();
+    if (rows.length < 20){ out.innerHTML = '<p class="empty">선택한 기간에 일봉 데이터가 20개보다 적습니다. 기간을 넓히거나 다른 데이터를 불러와 주세요.</p>'; return; }
+    var o = pr.o, res = backtest(rows, o);
+    LAST = { rows: rows, o: o, res: res };
+    var name = $('ticker').value.trim() || '종목';
+    var diff = res.retPct - res.bhPct;
+
+    var h = '';
+    if (SAMPLE) h += '<div class="sample-note">지금은 가상으로 만든 예시 데이터를 쓰고 있어서 실제 종목의 결과가 아닙니다. CSV를 불러오면 바뀝니다.</div>';
+    h += '<div class="headline"><span class="lab">' + esc(name) + ' · ' + rows[0].d + ' ~ ' + rows[rows.length - 1].d + ' (' + res.years.toFixed(1) + '년) · 순손익</span>' +
+         '<div class="big ' + cls(res.totalPnl) + '">' + money(res.totalPnl, true) + '</div>' +
+         '<div class="sub">최대 투입금 대비 <b class="' + cls(res.retPct) + '">' + pct(res.retPct, true) + '</b> · 같은 금액을 첫날 전부 사서 보유했다면 <b class="' + cls(res.bhPct) + '">' + pct(res.bhPct, true) + '</b> (' +
+         (diff >= 0 ? '전략이 ' : '전략이 ') + Math.abs(diff).toFixed(1) + '%p ' + (diff >= 0 ? '높음' : '낮음') + ')</div></div>';
+
+    var k = [
+      ['실현 손익', '<span class="' + cls(res.realized) + '">' + money(res.realized, true) + '</span>'],
+      ['평가 손익 (보유분)', '<span class="' + cls(res.unrealized) + '">' + money(res.unrealized, true) + '</span>'],
+      ['최대 투입금', money(res.maxInvested)],
+      ['연환산 수익률', res.cagr == null ? '-' : '<span class="' + cls(res.cagr) + '">' + pct(res.cagr, true) + '</span>'],
+      ['손익 최대 낙폭', '<span class="down">-' + res.mddPct.toFixed(1) + '%</span> (' + money(-res.mdd) + ')'],
+      ['최저 누적 손익', money(res.minPnl, true) + ' (' + pct(res.minPnlPct) + ')'],
+      ['매수 / 매도 횟수', res.nBuy + ' / ' + res.nSell + '회'],
+      ['최대 동시 보유', res.maxLotsHeld + '차수'],
+      ['한도로 건너뛴 날', res.blockedDays + '일'],
+      ['종료 시점 보유', res.openLots ? res.openLots + '차수 · 평단 ' + price(res.openAvg) : '없음']
+    ];
+    h += '<dl class="kpi">' + k.map(function(x){ return '<div><dt>' + x[0] + '</dt><dd>' + x[1] + '</dd></div>'; }).join('') + '</dl>';
+
+    h += '<section><h3>가격과 매매 시점</h3><p class="hint">▲ 매수, ▼ 매도. 차트 위에 커서를 올리면 날짜별 값이 보입니다.</p>' +
+         '<div class="readout" id="ro1"></div><div class="chart" id="c1"></div></section>';
+    h += '<section><h3>누적 손익</h3>' +
+         '<div class="legend"><span><i style="border-color:var(--accent)"></i>분할매수 전략</span><span><i style="border-color:var(--muted);border-top-style:dashed"></i>단순 보유 (같은 최대 투입금)</span></div>' +
+         '<div class="readout" id="ro2"></div><div class="chart" id="c2"></div></section>';
+    h += '<section><h3>하락률 × 상승률 비교</h3><p class="hint">다른 설정은 그대로 두고 두 비율만 바꿔 본 최대 투입금 대비 수익률입니다. 칸을 누르면 그 값이 적용됩니다.</p>' +
+         '<div class="scroll" id="hm"></div></section>';
+    h += '<section><h3>매매 내역</h3><p class="hint" id="logHint"></p><div class="log" id="log"></div></section>';
+    h += '<section><h3>계산 방식</h3><ul class="notes">' +
+         '<li>종가 기준이고 하루에 최대 1회만 매수합니다. 매도한 날에는 매수하지 않습니다.</li>' +
+         '<li>첫날 종가에 1차수를 사고, 전량 매도 후에는 다음 거래일 종가에 다시 1차수로 시작합니다.</li>' +
+         '<li>하락 조건을 만족해도 최대 차수나 총 한도에 걸리면 사지 않고, 그 날수를 "한도로 건너뛴 날"에 셉니다.</li>' +
+         '<li>수익률은 보유 중인 원가가 가장 컸던 시점(최대 투입금) 기준입니다. 단순 보유 비교는 수수료를 제외합니다.</li>' +
+         '<li>세금, 환율, 배당 재투자, 슬리피지는 반영하지 않았고, 과거 결과가 앞으로의 수익을 뜻하지는 않습니다.</li></ul></section>';
+    out.innerHTML = h;
+
+    var dates = rows.map(function(r){ return r.d; });
+    var markers = res.trades.map(function(t){ return { i: t.i, v: t.p, side: t.side }; });
+    drawChart($('c1'), {
+      id: 'c1', h: 260, ml: 52, dates: dates, label: '종가와 매수 매도 시점 차트', yfmt: axisPrice,
+      series: [{ vals: rows.map(function(r){ return r.c; }), cls: 'l-price' }], markers: markers,
+      onHover: function(i){
+        var j = i == null ? rows.length - 1 : i, c = res.curve[j];
+        $('ro1').textContent = c.d + ' · 종가 ' + price(c.c) + ' · 보유 ' + c.n + '차수';
+      }
+    });
+    drawChart($('c2'), {
+      id: 'c2', h: 260, ml: 58, dates: dates, label: '누적 손익 차트', yfmt: axisMoney, zero: true,
+      series: [{ vals: res.bh, cls: 'l-bh' }, { vals: res.curve.map(function(r){ return r.pnl; }), cls: 'l-strat' }],
+      onHover: function(i){
+        var j = i == null ? rows.length - 1 : i, c = res.curve[j];
+        $('ro2').textContent = c.d + ' · 전략 ' + money(c.pnl, true) + ' · 단순 보유 ' + money(res.bh[j], true) + ' · 투입 중 ' + money(c.inv);
+      }
+    });
+
+    var bl = [2, 3, 5, 7, 10], sl = [5, 7, 10, 15, 20];
+    var sw = sweep(rows, o, bl, sl), maxAbs = 1;
+    sw.forEach(function(r){ r.forEach(function(c){ maxAbs = Math.max(maxAbs, Math.abs(c.ret)); }); });
+    var t = '<table class="hm"><thead><tr><th class="axis l">하락 \\ 상승</th>' + sl.map(function(s){ return '<th class="axis">+' + s + '%</th>'; }).join('') + '</tr></thead><tbody>';
+    sw.forEach(function(r, ri){
+      t += '<tr><th class="axis l">-' + bl[ri] + '%</th>';
+      r.forEach(function(c){
+        var cur = Math.abs(c.b - o.buyPct) < 1e-9 && Math.abs(c.s - o.sellPct) < 1e-9;
+        var a = Math.round(Math.min(1, Math.abs(c.ret) / maxAbs) * 55);
+        t += '<td class="cell' + (c.ret < 0 ? ' neg' : '') + (cur ? ' cur' : '') + '" tabindex="0" role="button" style="--a:' + a + '%" data-b="' + c.b + '" data-s="' + c.s + '" title="수익률 ' + pct(c.ret, true) + ' · 최대 투입금 ' + money(c.inv) + '">' + pct(c.ret, true) + '</td>';
+      });
+      t += '</tr>';
+    });
+    $('hm').innerHTML = t + '</tbody></table>';
+    $('hm').querySelectorAll('td.cell').forEach(function(td){
+      var apply = function(){ $('buyPct').value = td.dataset.b; $('sellPct').value = td.dataset.s; render(); };
+      td.addEventListener('click', apply);
+      td.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); apply(); } });
+    });
+
+    var tr = res.trades, show = tr.slice(-300).reverse();
+    $('logHint').textContent = tr.length ? '총 ' + tr.length + '건' + (tr.length > 300 ? ' 중 최근 300건' : '') + ', 최신순입니다.' : '체결된 매매가 없습니다.';
+    var lt = '<table><thead><tr><th>날짜</th><th>구분</th><th>체결가</th><th>수량</th><th>금액</th><th>실현 손익</th><th class="l">비고</th></tr></thead><tbody>';
+    show.forEach(function(x){
+      lt += '<tr><td class="mono">' + x.d + '</td><td><span class="tag ' + (x.side === 'B' ? 'b">매수' : 's">매도') + '</span></td>' +
+            '<td class="mono">' + price(x.p) + '</td><td class="mono">' + (o.fractional ? x.sh.toFixed(3) : Math.round(x.sh).toLocaleString('ko-KR')) + '</td>' +
+            '<td class="mono">' + money(x.amt) + '</td><td class="mono ' + (x.pnl == null ? '' : cls(x.pnl)) + '">' + (x.pnl == null ? '-' : money(x.pnl, true)) + '</td>' +
+            '<td class="l">' + esc(x.note) + '</td></tr>';
+    });
+    $('log').innerHTML = lt + '</tbody></table>';
+  }
+
+  function schedule(){ clearTimeout(timer); timer = setTimeout(render, 120); }
+
+  /* ---------- 데이터 로드 ---------- */
+  function setData(rows, name, sample, colName){
+    DATA = rows; SAMPLE = sample; COLNAME = colName || '';
+    $('start').value = rows[0].d; $('end').value = rows[rows.length - 1].d;
+    $('dataInfo').textContent = (sample ? '예시(가상) 데이터 · ' : '') + rows.length.toLocaleString('ko-KR') + '개 일봉 · ' + rows[0].d + ' ~ ' + rows[rows.length - 1].d + (colName ? ' · 사용한 열: ' + colName : '');
+    if (name) $('ticker').value = name;
+    render();
+  }
+  function loadText(text, name){
+    try {
+      var p = parseCSV(text);
+      $('err').textContent = '';
+      setData(p.rows, name, false, p.colName);
+    } catch (e){ $('err').textContent = e.message; }
+  }
+  $('file').addEventListener('change', function(ev){
+    var f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function(){ loadText(String(rd.result), f.name.replace(/\.[^.]+$/, '')); };
+    rd.onerror = function(){ $('err').textContent = '파일을 읽지 못했습니다. 다시 선택해 주세요.'; };
+    rd.readAsText(f);
+    ev.target.value = '';
+  });
+  $('usePaste').addEventListener('click', function(){ loadText($('paste').value, ''); });
+  $('useSample').addEventListener('click', function(){ setData(sampleData(), '예시 종목', true, ''); });
+
+  $('cur').addEventListener('change', function(){
+    var prev = CUR; CUR = $('cur').value;
+    if (parseFloat($('amount').value) === DEFAULTS[prev].amount) $('amount').value = DEFAULTS[CUR].amount;
+    if (parseFloat($('fee').value) === DEFAULTS[prev].fee) $('fee').value = DEFAULTS[CUR].fee;
+    render();
+  });
+  ['buyPct','sellPct','buyRef','sellRef','amount','maxLots','budget','fee','frac','start','end'].forEach(function(id){
+    $(id).addEventListener('input', schedule);
+    $(id).addEventListener('change', schedule);
+  });
+  var rt = null;
+  window.addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(function(){ if (LAST) render(); }, 150); });
+
+  setData(sampleData(), '예시 종목', true, '');
+})();
+</script>
