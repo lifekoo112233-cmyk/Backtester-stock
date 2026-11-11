@@ -154,6 +154,7 @@ td.mono{font-family:var(--mono);font-size:12px}
           <div class="field"><label for="start">시작일</label><input type="date" id="start"></div>
           <div class="field"><label for="end">종료일</label><input type="date" id="end"></div>
         </div>
+        <div class="chips" id="dateChips" role="group" aria-label="시작일 바로가기"></div>
       </div>
 
       <div class="group">
@@ -441,7 +442,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
 <script>
 (function(){
   var $ = function(id){ return document.getElementById(id); };
-  var DATA = [], SAMPLE = true, COLNAME = '', timer = null, CUR = 'KRW';
+  var DATA = [], SAMPLE = true, COLNAME = '', timer = null, CUR = 'KRW', amtTouched = false;
   var DEFAULTS = { KRW: { amount: 1000000, fee: 0.05 }, USD: { amount: 1000, fee: 0.25 } };
 
   function money(n, sign){
@@ -480,16 +481,33 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
   function chipLabel(v){ return CUR === 'USD' ? '$' + v.toLocaleString('en-US') : (v / 10000).toLocaleString('ko-KR') + '만원'; }
   function buildChips(){
     var host = $('amtChips');
-    host.innerHTML = '<span class="lab">회당 금액 빠른 선택</span>' + CHIPS[CUR].map(function(v){
-      return '<button type="button" class="chip" data-v="' + v + '" aria-pressed="false">' + chipLabel(v) + '</button>';
-    }).join('');
-    host.querySelectorAll('.chip').forEach(function(b){
-      b.addEventListener('click', function(){ setMoney($('amount'), +b.dataset.v); render(); });
+    host.innerHTML = '<span class="lab">회당 금액 더하기</span>' + CHIPS[CUR].map(function(v){
+      return '<button type="button" class="chip" data-v="' + v + '">+' + chipLabel(v) + '</button>';
+    }).join('') + '<button type="button" class="chip" id="amtClear">지우기</button>';
+    host.querySelectorAll('.chip[data-v]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var cur = amtTouched ? parseNum($('amount').value) : 0;
+        setMoney($('amount'), (isFinite(cur) ? cur : 0) + (+b.dataset.v));
+        amtTouched = true;
+        render();
+      });
     });
+    $('amtClear').addEventListener('click', function(){ $('amount').value = ''; amtTouched = true; $('amount').focus(); render(); });
   }
-  function markChips(){
-    var a = parseNum($('amount').value);
-    $('amtChips').querySelectorAll('.chip').forEach(function(b){ b.setAttribute('aria-pressed', String(+b.dataset.v === a)); });
+  function buildDateChips(){
+    var host = $('dateChips');
+    host.innerHTML = '<span class="lab">시작일 바로가기</span>' + [2000, 2010, 2020].map(function(y){
+      return '<button type="button" class="chip" data-y="' + y + '">' + y + '년부터</button>';
+    }).join('') + '<button type="button" class="chip" data-y="all">전체 기간</button>';
+    host.querySelectorAll('.chip').forEach(function(b){
+      b.addEventListener('click', function(){
+        if (!DATA.length) return;
+        var first = DATA[0].d, last = DATA[DATA.length - 1].d;
+        if (b.dataset.y === 'all'){ $('start').value = first; $('end').value = last; }
+        else { var d = b.dataset.y + '-01-01'; $('start').value = d < first ? first : (d > last ? last : d); }
+        render();
+      });
+    });
   }
   function fmtInput(el){
     var raw = el.value, pos = el.selectionStart == null ? raw.length : el.selectionStart;
@@ -594,7 +612,6 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
   function render(){
     var out = $('out'), err = $('err');
     err.textContent = '';
-    markChips();
     var pr = readParams();
     if (pr.error){ err.textContent = pr.error; return; }
     var rows = slice();
@@ -737,7 +754,8 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
   $('cur').addEventListener('change', function(){
     var prev = CUR; CUR = $('cur').value;
     var curAmt = parseNum($('amount').value), ci = CHIPS[prev].indexOf(curAmt);
-    if (curAmt === DEFAULTS[prev].amount) setMoney($('amount'), DEFAULTS[CUR].amount);
+    if (curAmt === DEFAULTS[prev].amount && !amtTouched) { setMoney($('amount'), DEFAULTS[CUR].amount); }
+    else if (curAmt === DEFAULTS[prev].amount) setMoney($('amount'), DEFAULTS[CUR].amount);
     else if (ci >= 0) setMoney($('amount'), CHIPS[CUR][ci]);
     buildChips();
     if (parseFloat($('fee').value) === DEFAULTS[prev].fee) $('fee').value = DEFAULTS[CUR].fee;
@@ -747,7 +765,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
     $(id).addEventListener('input', schedule);
     $(id).addEventListener('change', schedule);
   });
-  ['amount', 'budget'].forEach(function(id){ $(id).addEventListener('input', function(){ fmtInput($(id)); }); });
+  ['amount', 'budget'].forEach(function(id){ $(id).addEventListener('input', function(){ if (id === 'amount') amtTouched = true; fmtInput($(id)); }); });
   var rt = null;
   window.addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(function(){ if (LAST) render(); }, 150); });
 
@@ -776,6 +794,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
   loadSavedList();
 
   buildChips();
+  buildDateChips();
   setData(sampleData(), '예시 종목', true, '');
 })();
 </script>
