@@ -115,6 +115,10 @@ td.mono{font-family:var(--mono);font-size:12px}
 .notes{margin:0;padding-left:18px;color:var(--muted);font-size:12.5px}
 .notes li+li{margin-top:3px}
 .empty{padding:28px 0;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.chips .lab{margin-right:2px}
+.chip{font-size:12.5px;padding:4px 11px;border-radius:99px}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 @media (prefers-reduced-motion:no-preference){button{transition:filter .12s}button:hover{filter:brightness(.96)}}
 </style>
 
@@ -158,6 +162,7 @@ td.mono{font-family:var(--mono);font-size:12px}
           <div class="field"><label for="buyPct">하락률 (%)</label><input type="number" id="buyPct" value="5" min="0.1" max="90" step="any" inputmode="decimal"></div>
           <div class="field"><label for="amount">회당 매수 금액</label><input type="text" id="amount" class="num" value="1,000,000" inputmode="decimal" autocomplete="off"></div>
         </div>
+        <div class="chips" id="amtChips" role="group" aria-label="회당 매수 금액 빠른 선택"></div>
         <div class="field"><label for="buyRef">하락 기준</label>
           <select id="buyRef">
             <option value="lastBuy">직전 매수가 대비</option>
@@ -471,6 +476,21 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
   /* 금액 입력칸: 천 단위 쉼표 */
   function parseNum(s){ var v = parseFloat(String(s).replace(/,/g, '')); return isFinite(v) ? v : NaN; }
   function setMoney(el, n){ el.value = n.toLocaleString('en-US', { maximumFractionDigits: 6 }); }
+  var CHIPS = { KRW: [500000, 3000000, 5000000], USD: [500, 1000, 5000] };
+  function chipLabel(v){ return CUR === 'USD' ? '$' + v.toLocaleString('en-US') : (v / 10000).toLocaleString('ko-KR') + '만원'; }
+  function buildChips(){
+    var host = $('amtChips');
+    host.innerHTML = '<span class="lab">회당 금액 빠른 선택</span>' + CHIPS[CUR].map(function(v){
+      return '<button type="button" class="chip" data-v="' + v + '" aria-pressed="false">' + chipLabel(v) + '</button>';
+    }).join('');
+    host.querySelectorAll('.chip').forEach(function(b){
+      b.addEventListener('click', function(){ setMoney($('amount'), +b.dataset.v); render(); });
+    });
+  }
+  function markChips(){
+    var a = parseNum($('amount').value);
+    $('amtChips').querySelectorAll('.chip').forEach(function(b){ b.setAttribute('aria-pressed', String(+b.dataset.v === a)); });
+  }
   function fmtInput(el){
     var raw = el.value, pos = el.selectionStart == null ? raw.length : el.selectionStart;
     var left = raw.slice(0, pos).replace(/[^0-9.]/g, '').length;
@@ -574,6 +594,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
   function render(){
     var out = $('out'), err = $('err');
     err.textContent = '';
+    markChips();
     var pr = readParams();
     if (pr.error){ err.textContent = pr.error; return; }
     var rows = slice();
@@ -715,7 +736,10 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
 
   $('cur').addEventListener('change', function(){
     var prev = CUR; CUR = $('cur').value;
-    if (parseNum($('amount').value) === DEFAULTS[prev].amount) setMoney($('amount'), DEFAULTS[CUR].amount);
+    var curAmt = parseNum($('amount').value), ci = CHIPS[prev].indexOf(curAmt);
+    if (curAmt === DEFAULTS[prev].amount) setMoney($('amount'), DEFAULTS[CUR].amount);
+    else if (ci >= 0) setMoney($('amount'), CHIPS[CUR][ci]);
+    buildChips();
     if (parseFloat($('fee').value) === DEFAULTS[prev].fee) $('fee').value = DEFAULTS[CUR].fee;
     render();
   });
@@ -751,6 +775,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
   }
   loadSavedList();
 
+  buildChips();
   setData(sampleData(), '예시 종목', true, '');
 })();
 </script>
