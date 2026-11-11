@@ -168,6 +168,16 @@ td.mono{font-family:var(--mono);font-size:12px}
           <div class="field"><label for="maxLots">최대 차수</label><input type="number" id="maxLots" value="10" min="1" max="200" step="1" inputmode="numeric"></div>
           <div class="field"><label for="budget">총 투자 한도 (0=무제한)</label><input type="number" id="budget" value="0" min="0" step="any" inputmode="decimal"></div>
         </div>
+        <div class="row">
+          <div class="field"><label for="stepFrom">증액 시작 차수 (0=끔)</label><input type="number" id="stepFrom" value="0" min="0" max="200" step="1" inputmode="numeric"></div>
+          <div class="field"><label for="stepMult">증액 배수</label><input type="number" id="stepMult" value="2" min="0.1" max="20" step="any" inputmode="decimal"></div>
+        </div>
+        <div class="field"><label for="stepMode">증액 방식</label>
+          <select id="stepMode">
+            <option value="flat">시작 차수부터 전부 금액 × 배수</option>
+            <option value="grow">시작 차수부터 차수마다 배수를 거듭 곱함</option>
+          </select></div>
+        <p class="hint" id="stepHint"></p>
       </div>
 
       <div class="group">
@@ -298,9 +308,20 @@ function dayDiff(a, b){
   return (Date.UTC(+pb[0], +pb[1] - 1, +pb[2]) - Date.UTC(+pa[0], +pa[1] - 1, +pa[2])) / 864e5;
 }
 
+/* 보유 차수가 lotNo번째가 되는 매수의 금액. stepFrom=0이면 항상 고정 금액.
+   stepMode 'flat': stepFrom차수부터 전부 amount x stepMult
+   stepMode 'grow': stepFrom차수에서 x stepMult, 이후 차수마다 stepMult를 한 번씩 더 곱함 */
+function lotAmount(o, lotNo){
+  var from = o.stepFrom || 0, m = o.stepMult || 1;
+  if (!(from > 0) || lotNo < from) return o.amount;
+  if (o.stepMode === 'grow') return o.amount * Math.pow(m, lotNo - from + 1);
+  return o.amount * m;
+}
+
 /*
  o = {buyPct, sellPct, buyRef:'lastBuy'|'prevClose'|'peak', sellRef:'avg'|'lot',
-      amount, maxLots, budget(0=무제한), feePct, fractional}
+      amount, maxLots, budget(0=무제한), feePct, fractional,
+      stepFrom(0=끔), stepMult, stepMode:'flat'|'grow'}
 */
 function backtest(rows, o){
   var EPS = 1e-9, fee = (o.feePct || 0) / 100;
@@ -351,9 +372,10 @@ function backtest(rows, o){
         if (ref != null && c <= ref * (1 - o.buyPct / 100) + EPS) trigger = true;
       }
       if (trigger){
-        var qty = o.fractional ? o.amount / c : Math.floor(o.amount / c);
+        var lotAmt = lotAmount(o, lots.length + 1);
+        var qty = o.fractional ? lotAmt / c : Math.floor(lotAmt / c);
         var capOK = lots.length < o.maxLots;
-        var budgetOK = !o.budget || invested + o.amount * (1 + fee) <= o.budget + EPS;
+        var budgetOK = !o.budget || invested + lotAmt * (1 + fee) <= o.budget + EPS;
         if (capOK && budgetOK && qty > 0){
           var bc = qty * c * (1 + fee);
           lots.push({ sh: qty, p: c, cost: bc, n: lots.length + 1 });
@@ -407,7 +429,7 @@ function sweep(rows, o, buyList, sellList){
   });
 }
 
-if (typeof module !== 'undefined') module.exports = { backtest: backtest, sweep: sweep, parseCSV: parseCSV, sampleData: sampleData, normDate: normDate };
+if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, backtest: backtest, sweep: sweep, parseCSV: parseCSV, sampleData: sampleData, normDate: normDate };
 
 </script>
 
@@ -452,12 +474,16 @@ if (typeof module !== 'undefined') module.exports = { backtest: backtest, sweep:
       buyRef: $('buyRef').value, sellRef: $('sellRef').value,
       amount: parseFloat($('amount').value), maxLots: parseInt($('maxLots').value, 10),
       budget: parseFloat($('budget').value) || 0, feePct: parseFloat($('fee').value) || 0,
-      fractional: $('frac').checked
+      fractional: $('frac').checked,
+      stepFrom: parseInt($('stepFrom').value, 10) || 0, stepMult: parseFloat($('stepMult').value), stepMode: $('stepMode').value
     };
     if (!(o.buyPct > 0) || !(o.sellPct > 0)) return { error: '하락률과 상승률은 0보다 커야 합니다.' };
     if (o.buyPct >= 100) return { error: '하락률은 100% 미만으로 입력해 주세요.' };
     if (!(o.amount > 0)) return { error: '회당 매수 금액을 입력해 주세요.' };
     if (!(o.maxLots >= 1)) return { error: '최대 차수는 1 이상이어야 합니다.' };
+    if (o.stepFrom < 0) return { error: '증액 시작 차수는 0 이상이어야 합니다.' };
+    if (o.stepFrom > 0 && !(o.stepMult > 0)) return { error: '증액 배수는 0보다 커야 합니다.' };
+    if (!(o.stepFrom > 0)) o.stepMult = 1;
     return { o: o };
   }
 
@@ -537,6 +563,17 @@ if (typeof module !== 'undefined') module.exports = { backtest: backtest, sweep:
     if (rows.length < 20){ out.innerHTML = '<p class="empty">선택한 기간에 일봉 데이터가 20개보다 적습니다. 기간을 넓히거나 다른 데이터를 불러와 주세요.</p>'; return; }
     var o = pr.o, res = backtest(rows, o);
     LAST = { rows: rows, o: o, res: res };
+    (function(){
+      var el = $('stepHint');
+      if (!(o.stepFrom > 0)){ el.textContent = '지금은 모든 차수에 같은 금액을 넣습니다.'; return; }
+      var parts = [], last = -1, lim = Math.min(o.maxLots, o.stepFrom + 3);
+      for (var n = 1; n <= lim; n++){
+        var a = lotAmount(o, n);
+        if (n === 1 || a !== last || n === lim) parts.push(n + '차수 ' + money(a));
+        last = a;
+      }
+      el.textContent = '보유 차수가 ' + o.stepFrom + '번째가 되는 매수부터 늘립니다. ' + parts.join(' · ') + (o.maxLots > lim ? ' …' : '');
+    })();
     var name = $('ticker').value.trim() || '종목';
     var diff = res.retPct - res.bhPct;
 
@@ -572,6 +609,7 @@ if (typeof module !== 'undefined') module.exports = { backtest: backtest, sweep:
     h += '<section><h3>계산 방식</h3><ul class="notes">' +
          '<li>종가 기준이고 하루에 최대 1회만 매수합니다. 매도한 날에는 매수하지 않습니다.</li>' +
          '<li>첫날 종가에 1차수를 사고, 전량 매도 후에는 다음 거래일 종가에 다시 1차수로 시작합니다.</li>' +
+         '<li>증액을 켜면 "보유 중인 차수"를 기준으로 금액이 정해집니다. 일부를 팔아 차수가 줄면 다음 매수 금액도 그 차수의 금액으로 돌아갑니다.</li>' +
          '<li>하락 조건을 만족해도 최대 차수나 총 한도에 걸리면 사지 않고, 그 날수를 "한도로 건너뛴 날"에 셉니다.</li>' +
          '<li>수익률은 보유 중인 원가가 가장 컸던 시점(최대 투입금) 기준입니다. 단순 보유 비교는 수수료를 제외합니다.</li>' +
          '<li>세금, 환율, 배당 재투자, 슬리피지는 반영하지 않았고, 과거 결과가 앞으로의 수익을 뜻하지는 않습니다.</li></ul></section>';
@@ -663,7 +701,7 @@ if (typeof module !== 'undefined') module.exports = { backtest: backtest, sweep:
     if (parseFloat($('fee').value) === DEFAULTS[prev].fee) $('fee').value = DEFAULTS[CUR].fee;
     render();
   });
-  ['buyPct','sellPct','buyRef','sellRef','amount','maxLots','budget','fee','frac','start','end'].forEach(function(id){
+  ['buyPct','sellPct','buyRef','sellRef','amount','maxLots','budget','fee','frac','start','end','stepFrom','stepMult','stepMode'].forEach(function(id){
     $(id).addEventListener('input', schedule);
     $(id).addEventListener('change', schedule);
   });
