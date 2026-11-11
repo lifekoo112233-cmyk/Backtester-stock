@@ -4,3 +4,6 @@ TQQQ
 QQQ
 SPY
 005930.KS
+soxl
+122630.ks
+233740.kq
