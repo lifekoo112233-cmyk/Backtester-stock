@@ -5,6 +5,7 @@
 """
 import json
 import pathlib
+import re
 import sys
 import time
 
@@ -17,12 +18,19 @@ COLS = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
 
 
 def read_tickers():
-    tickers = []
+    """[(티커, 표시 이름)] 목록. 한 줄에 '005930.KS 삼성전자'처럼 코드 뒤에 이름을 적을 수 있습니다."""
+    out, seen = [], set()
     for line in (ROOT / "tickers.txt").read_text(encoding="utf-8").splitlines():
-        t = line.split("#")[0].strip()
-        if t and t not in tickers:
-            tickers.append(t)
-    return tickers
+        line = line.split("#")[0].strip()
+        if not line:
+            continue
+        parts = re.split(r"[\s,|]+", line, maxsplit=1)
+        t = parts[0].strip()
+        name = parts[1].strip() if len(parts) > 1 else ""
+        if t and t.upper() not in seen:
+            seen.add(t.upper())
+            out.append((t, name))
+    return out
 
 
 def fetch(ticker):
@@ -62,18 +70,21 @@ def main():
         except Exception:
             old = {}
     entries, ok = [], 0
-    for t in read_tickers():
-        print(f"{t} 받는 중...")
+    for t, name in read_tickers():
+        print(f"{t} {name} 받는 중...")
         df = fetch(t)
         if df is None:
             print(f"  {t}: 실패했습니다. 이전 파일이 있으면 그대로 둡니다.")
             if t in old:
-                entries.append(old[t])
+                keep = dict(old[t])
+                if name:
+                    keep["name"] = name
+                entries.append(keep)
             continue
         out = to_csv_frame(df)
         fname = f"{t}.csv"
         out.to_csv(OUT / fname, encoding="utf-8")
-        entries.append({"t": t, "file": fname, "first": out.index[0], "last": out.index[-1], "n": int(len(out))})
+        entries.append({"t": t, "name": name, "file": fname, "first": out.index[0], "last": out.index[-1], "n": int(len(out))})
         ok += 1
         print(f"  {t}: {len(out)}행 ({out.index[0]} ~ {out.index[-1]})")
         time.sleep(1)
