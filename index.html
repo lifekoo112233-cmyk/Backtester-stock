@@ -142,11 +142,6 @@ td.mono{font-family:var(--mono);font-size:12px}
           <label class="filebtn">CSV 불러오기<input type="file" id="file" accept=".csv,.txt,text/csv"></label>
           <button type="button" id="useSample">예시 데이터</button>
         </div>
-        <details>
-          <summary>CSV 붙여넣기</summary>
-          <textarea id="paste" placeholder="Date,Close&#10;2024-01-02,71000&#10;..."></textarea>
-          <div class="btns" style="margin-top:8px"><button type="button" id="usePaste">붙여넣은 데이터 사용</button></div>
-        </details>
         <p class="hint" id="dataInfo"></p>
         <p class="hint">야후 파이낸스, 인베스팅닷컴, 증권사에서 내보낸 일봉 CSV를 읽습니다. 날짜와 종가 열이 필요하고, 수정종가(Adj Close)가 있으면 그 열을 씁니다.</p>
         <p class="msg" id="err" role="alert"></p>
@@ -748,7 +743,6 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
     rd.readAsText(f);
     ev.target.value = '';
   });
-  $('usePaste').addEventListener('click', function(){ loadText($('paste').value, ''); });
   $('useSample').addEventListener('click', function(){ setData(sampleData(), '예시 종목', true, ''); });
 
   $('cur').addEventListener('change', function(){
