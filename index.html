@@ -156,7 +156,7 @@ td.mono{font-family:var(--mono);font-size:12px}
         <h2>매수 조건</h2>
         <div class="row">
           <div class="field"><label for="buyPct">하락률 (%)</label><input type="number" id="buyPct" value="5" min="0.1" max="90" step="any" inputmode="decimal"></div>
-          <div class="field"><label for="amount">회당 매수 금액</label><input type="number" id="amount" value="1000000" min="1" step="any" inputmode="decimal"></div>
+          <div class="field"><label for="amount">회당 매수 금액</label><input type="text" id="amount" class="num" value="1,000,000" inputmode="decimal" autocomplete="off"></div>
         </div>
         <div class="field"><label for="buyRef">하락 기준</label>
           <select id="buyRef">
@@ -166,7 +166,7 @@ td.mono{font-family:var(--mono);font-size:12px}
           </select></div>
         <div class="row">
           <div class="field"><label for="maxLots">최대 차수</label><input type="number" id="maxLots" value="10" min="1" max="200" step="1" inputmode="numeric"></div>
-          <div class="field"><label for="budget">총 투자 한도 (0=무제한)</label><input type="number" id="budget" value="0" min="0" step="any" inputmode="decimal"></div>
+          <div class="field"><label for="budget">총 투자 한도 (0=무제한)</label><input type="text" id="budget" class="num" value="0" inputmode="decimal" autocomplete="off"></div>
         </div>
         <div class="row">
           <div class="field"><label for="stepFrom">증액 시작 차수 (0=끔)</label><input type="number" id="stepFrom" value="0" min="0" max="200" step="1" inputmode="numeric"></div>
@@ -174,8 +174,8 @@ td.mono{font-family:var(--mono);font-size:12px}
         </div>
         <div class="field"><label for="stepMode">증액 방식</label>
           <select id="stepMode">
-            <option value="flat">시작 차수부터 전부 금액 × 배수</option>
-            <option value="grow">시작 차수부터 차수마다 배수를 거듭 곱함</option>
+            <option value="flat">증액 시작 차수부터 전부 금액 × 배수</option>
+            <option value="grow">증액 시작 차수부터 차수마다 배수를 거듭 곱함</option>
           </select></div>
         <p class="hint" id="stepHint"></p>
       </div>
@@ -462,18 +462,35 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
   }
   function axisPrice(n){
     if (CUR === 'USD') return '$' + (n >= 100 ? Math.round(n) : n.toFixed(1));
-    return n >= 1e4 ? Math.round(n / 1e3).toLocaleString('ko-KR') + '천' : Math.round(n).toLocaleString('ko-KR');
+    return Math.round(n).toLocaleString('ko-KR');
   }
   function pct(n, sign){ return (sign && n > 0 ? '+' : '') + n.toFixed(1) + '%'; }
   function cls(n){ return n > 0 ? 'up' : n < 0 ? 'down' : ''; }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
+  /* 금액 입력칸: 천 단위 쉼표 */
+  function parseNum(s){ var v = parseFloat(String(s).replace(/,/g, '')); return isFinite(v) ? v : NaN; }
+  function setMoney(el, n){ el.value = n.toLocaleString('en-US', { maximumFractionDigits: 6 }); }
+  function fmtInput(el){
+    var raw = el.value, pos = el.selectionStart == null ? raw.length : el.selectionStart;
+    var left = raw.slice(0, pos).replace(/[^0-9.]/g, '').length;
+    var clean = raw.replace(/[^0-9.]/g, ''), dot = clean.indexOf('.');
+    if (dot >= 0) clean = clean.slice(0, dot + 1) + clean.slice(dot + 1).replace(/\./g, '');
+    var ip = dot >= 0 ? clean.slice(0, dot) : clean, fp = dot >= 0 ? clean.slice(dot) : '';
+    ip = ip.replace(/^0+(?=\d)/, '');
+    var out = ip.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + fp;
+    el.value = out;
+    var n = 0, i = 0;
+    for (; i < out.length && n < left; i++) if (/[0-9.]/.test(out[i])) n++;
+    try { el.setSelectionRange(i, i); } catch (e) {}
+  }
+
   function readParams(){
     var o = {
       buyPct: parseFloat($('buyPct').value), sellPct: parseFloat($('sellPct').value),
       buyRef: $('buyRef').value, sellRef: $('sellRef').value,
-      amount: parseFloat($('amount').value), maxLots: parseInt($('maxLots').value, 10),
-      budget: parseFloat($('budget').value) || 0, feePct: parseFloat($('fee').value) || 0,
+      amount: parseNum($('amount').value), maxLots: parseInt($('maxLots').value, 10),
+      budget: parseNum($('budget').value) || 0, feePct: parseFloat($('fee').value) || 0,
       fractional: $('frac').checked,
       stepFrom: parseInt($('stepFrom').value, 10) || 0, stepMult: parseFloat($('stepMult').value), stepMode: $('stepMode').value
     };
@@ -578,6 +595,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
     var diff = res.retPct - res.bhPct;
 
     var h = '';
+    if (!res.nBuy) h += '<div class="sample-note">매수가 한 번도 일어나지 않았습니다. 회당 매수 금액이 총 투자 한도나 종목 가격보다 큰지 확인해 주세요.</div>';
     if (SAMPLE) h += '<div class="sample-note">지금은 가상으로 만든 예시 데이터를 쓰고 있어서 실제 종목의 결과가 아닙니다. CSV를 불러오면 바뀝니다.</div>';
     h += '<div class="headline"><span class="lab">' + esc(name) + ' · ' + rows[0].d + ' ~ ' + rows[rows.length - 1].d + ' (' + res.years.toFixed(1) + '년) · 순손익</span>' +
          '<div class="big ' + cls(res.totalPnl) + '">' + money(res.totalPnl, true) + '</div>' +
@@ -618,7 +636,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
     var dates = rows.map(function(r){ return r.d; });
     var markers = res.trades.map(function(t){ return { i: t.i, v: t.p, side: t.side }; });
     drawChart($('c1'), {
-      id: 'c1', h: 260, ml: 52, dates: dates, label: '종가와 매수 매도 시점 차트', yfmt: axisPrice,
+      id: 'c1', h: 260, ml: 66, dates: dates, label: '종가와 매수 매도 시점 차트', yfmt: axisPrice,
       series: [{ vals: rows.map(function(r){ return r.c; }), cls: 'l-price' }], markers: markers,
       onHover: function(i){
         var j = i == null ? rows.length - 1 : i, c = res.curve[j];
@@ -697,7 +715,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
 
   $('cur').addEventListener('change', function(){
     var prev = CUR; CUR = $('cur').value;
-    if (parseFloat($('amount').value) === DEFAULTS[prev].amount) $('amount').value = DEFAULTS[CUR].amount;
+    if (parseNum($('amount').value) === DEFAULTS[prev].amount) setMoney($('amount'), DEFAULTS[CUR].amount);
     if (parseFloat($('fee').value) === DEFAULTS[prev].fee) $('fee').value = DEFAULTS[CUR].fee;
     render();
   });
@@ -705,6 +723,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
     $(id).addEventListener('input', schedule);
     $(id).addEventListener('change', schedule);
   });
+  ['amount', 'budget'].forEach(function(id){ $(id).addEventListener('input', function(){ fmtInput($(id)); }); });
   var rt = null;
   window.addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(function(){ if (LAST) render(); }, 150); });
 
@@ -715,7 +734,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
       if (!Array.isArray(list) || !list.length) return;
       var sel = $('saved');
       sel.innerHTML = '<option value="">종목 선택...</option>' + list.map(function(e, i){
-        return '<option value="' + i + '">' + esc(e.t) + ' (' + e.first + ' ~ ' + e.last + ')</option>';
+        return '<option value="' + i + '">' + esc(e.name ? e.name + ' · ' + e.t.toUpperCase() : e.t.toUpperCase()) + '  ' + e.first + ' ~ ' + e.last + '</option>';
       }).join('');
       $('savedWrap').hidden = false;
       sel.addEventListener('change', function(){
@@ -725,7 +744,7 @@ if (typeof module !== 'undefined') module.exports = { lotAmount: lotAmount, back
         fetch('data/' + encodeURIComponent(e.file)).then(function(r){ if (!r.ok) throw new Error('파일을 찾지 못했습니다: ' + e.file); return r.text(); }).then(function(txt){
           var c = /\.(KS|KQ)$/i.test(e.t) ? 'KRW' : 'USD';
           if ($('cur').value !== c){ $('cur').value = c; $('cur').dispatchEvent(new Event('change')); }
-          loadText(txt, e.t);
+          loadText(txt, e.name || e.t.toUpperCase());
         }).catch(function(er){ $('err').textContent = er.message; });
       });
     }).catch(function(){ /* data 폴더가 없으면 목록을 숨긴 채로 둠 */ });
