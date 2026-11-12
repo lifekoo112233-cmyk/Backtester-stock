@@ -10,7 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="백테스터">
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap"></noscript>
 <style>
 /* Layout: 왼쪽 조건 패널(고정폭) + 오른쪽 결과. 폰에서는 한 열로 쌓임 */
 :root{
@@ -284,6 +285,11 @@ table.mg td.mgc{cursor:pointer}
 </div>
 
 <script>
+/* 화면 오류가 나면 조용히 멈추지 않고 메시지를 보여 줌 */
+window.addEventListener('error', function(e){
+  var el = document.getElementById('err');
+  if (el) el.textContent = '화면 오류: ' + (e.message || '알 수 없음') + ' (줄 ' + (e.lineno || '?') + ')';
+});
 /* ===== 백테스트 엔진 (순수 함수) ===== */
 function pad2(x){ x = String(x); return x.length < 2 ? '0' + x : x; }
 function isoDate(d){ return d.toISOString().slice(0, 10); }
@@ -1680,12 +1686,4 @@ if (typeof module !== 'undefined') module.exports = {
     fetch('data/status.json', { cache: 'no-cache' }).then(function(r){ return r.ok ? r.json() : null; }).then(showStatus).catch(function(){});
     fetch('data/index.json', { cache: 'no-cache' }).then(function(r){ if (!r.ok) throw new Error('no index'); return r.json(); }).then(function(list){
       if (!Array.isArray(list) || !list.length) return;
-      SAVED = list;
-      var sel = $('saved');
-      sel.innerHTML = '<option value="">종목 선택...</option>' + list.map(function(e, i){
-        return '<option value="' + i + '">' + esc(e.name ? e.name + ' · ' + e.t.toUpperCase() : e.t.toUpperCase()) + '  ' + e.first + ' ~ ' + e.last + '</option>';
-      }).join('');
-      $('savedWrap').hidden = false;
-      sel.addEventListener('change', function(){
-        var e = list[parseInt(sel.value, 10)];
-      
+      SAVED = li
