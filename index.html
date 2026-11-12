@@ -127,6 +127,10 @@ table.cmp tr.cur td{background:var(--chip)}
   background:color-mix(in srgb,var(--hue) var(--a),var(--surface))}
 .hm td.cell.neg{--hue:var(--down)}
 .hm td.cell.cur{outline:2px solid var(--fg);outline-offset:-2px}
+.hm td.cell.best{font-weight:700;box-shadow:inset 0 0 0 2px var(--accent)}
+.tier{display:flex;flex-direction:column;gap:6px;padding:8px 0;border-top:1px dashed var(--line)}
+.trow{display:grid;grid-template-columns:64px auto 1fr auto;gap:6px;align-items:center}
+.trow .lab{white-space:nowrap}
 .hm th.axis{background:transparent;position:static;color:var(--muted)}
 .notes{margin:0;padding-left:18px;color:var(--muted);font-size:12.5px}
 .notes li+li{margin-top:3px}
@@ -161,12 +165,7 @@ table.cmp tr.cur td{background:var(--chip)}
         </div>
         <div class="field" id="savedWrap" hidden><label for="saved">저장된 종목 (매일 자동 갱신)</label><select id="saved"></select></div>
         <p class="hint" id="status" hidden></p>
-        <div class="btns">
-          <label class="filebtn">CSV 불러오기<input type="file" id="file" accept=".csv,.txt,text/csv"></label>
-          <button type="button" id="useSample">예시 데이터</button>
-        </div>
         <p class="hint" id="dataInfo"></p>
-        <p class="hint">야후 파이낸스, 인베스팅닷컴, 증권사에서 내보낸 일봉 CSV를 읽습니다. 날짜와 종가 열이 필요하고, 수정종가(Adj Close)와 시가(Open) 열이 있으면 함께 씁니다.</p>
         <p class="msg" id="err" role="alert"></p>
         <div class="row">
           <div class="field"><label for="start">시작일</label><input type="date" id="start"></div>
@@ -194,15 +193,10 @@ table.cmp tr.cur td{background:var(--chip)}
           <div class="field"><label for="maxLots">최대 차수</label><input type="number" id="maxLots" value="10" min="1" max="200" step="1" inputmode="numeric"></div>
           <div class="field"><label for="budget">총 투자 한도 (0=무제한)</label><input type="text" id="budget" class="num" value="0" inputmode="decimal" autocomplete="off"></div>
         </div>
-        <div class="row">
-          <div class="field"><label for="stepFrom">증액 시작 차수 (0=끔)</label><input type="number" id="stepFrom" value="0" min="0" max="200" step="1" inputmode="numeric"></div>
-          <div class="field"><label for="stepMult">증액 배수</label><input type="number" id="stepMult" value="2" min="0.1" max="20" step="any" inputmode="decimal"></div>
-        </div>
-        <div class="field"><label for="stepMode">증액 방식</label>
-          <select id="stepMode">
-            <option value="flat">증액 시작 차수부터 전부 금액 × 배수</option>
-            <option value="grow">증액 시작 차수부터 차수마다 배수를 거듭 곱함</option>
-          </select></div>
+        <div class="field"><label>차수별 금액 바꾸기</label></div>
+        <div id="tiers"></div>
+        <div class="btns"><button type="button" class="small" id="tierAdd">+ 증액 구간 추가</button></div>
+        <p class="hint">몇 차수부터 회당 매수 금액을 얼마로 할지 정합니다. 예: 5차수부터 2,000,000원, 8차수부터 3,000,000원. 구간이 시작되기 전까지는 위의 회당 매수 금액을 씁니다.</p>
         <p class="hint" id="stepHint"></p>
       </div>
 
@@ -235,7 +229,7 @@ table.cmp tr.cur td{background:var(--chip)}
       </div>
 
       <details class="adv" id="adv">
-        <summary>고급 옵션 (손절 · 분할 매도 · 감액 · 비중 한도)</summary>
+        <summary>고급 옵션 (손절 · 분할 매도 · 감액)</summary>
         <div class="group">
           <p class="sub2">손절과 보유 기간 제한</p>
           <div class="row">
@@ -252,14 +246,10 @@ table.cmp tr.cur td{background:var(--chip)}
           <p class="sub2">증액 후 감액</p>
           <div class="row">
             <div class="field"><label for="redFrom">감액 시작 차수 (0=끔)</label><input type="number" id="redFrom" value="0" min="0" max="200" step="1" inputmode="numeric"></div>
-            <div class="field"><label for="redPct">감액 후 금액 (%)</label><input type="number" id="redPct" value="50" min="1" max="100" step="any" inputmode="decimal"></div>
+            <div class="field"><label for="redAmt">감액 후 회당 금액</label><input type="text" id="redAmt" class="num" value="0" inputmode="decimal" autocomplete="off"></div>
           </div>
-          <p class="sub2">비중 한도</p>
-          <div class="row">
-            <div class="field"><label for="acct">계좌 총액 (0=끔)</label><input type="text" id="acct" class="num" value="0" inputmode="decimal" autocomplete="off"></div>
-            <div class="field"><label for="weight">이 종목 최대 비중 (%)</label><input type="number" id="weight" value="30" min="1" max="100" step="any" inputmode="decimal"></div>
-          </div>
-          <p class="hint">계좌 총액 × 최대 비중이 이 종목에 넣을 수 있는 투입 한도가 됩니다. 총 투자 한도와 함께 쓰면 더 작은 쪽이 적용됩니다.</p>
+          <div class="chips" id="redChips" role="group" aria-label="감액 금액 빠른 선택"></div>
+          <p class="hint">이 차수부터는 위의 차수별 금액과 상관없이 입력한 금액씩 매수합니다.</p>
         </div>
       </details>
     </form>
@@ -396,15 +386,24 @@ function dayDiff(a, b){
 }
 
 /* 보유 차수가 lotNo번째가 되는 매수의 금액.
-   증액: stepFrom(0=끔)차수부터 'flat' 금액 x stepMult / 'grow' 차수마다 stepMult를 한 번씩 더 곱함
-   감액: reduceFrom(0=끔)차수부터 위 금액의 reducePct% */
+   tiers=[{from, amount}]: from 차수부터 회당 금액을 amount 로 바꿈 (없으면 기본 amount)
+   (예전 방식 stepFrom/stepMult/stepMode 도 그대로 지원)
+   감액: reduceFrom(0=끔)차수부터 reduceAmt 금액(또는 reducePct%) */
 function lotAmount(o, lotNo){
-  var from = o.stepFrom || 0, m = o.stepMult || 1, amt = o.amount;
-  if (from > 0 && lotNo >= from){
-    amt = o.stepMode === 'grow' ? o.amount * Math.pow(m, lotNo - from + 1) : o.amount * m;
+  var amt = o.amount, t = o.tiers, i;
+  if (t && t.length){
+    /* 차수 구간: lotNo 이하 중 가장 큰 시작 차수의 금액 (시작 차수 오름차순이 아니어도 동작) */
+    var best = -1;
+    for (i = 0; i < t.length; i++) if (lotNo >= t[i].from && t[i].from > best){ best = t[i].from; amt = t[i].amount; }
+  } else {
+    var from = o.stepFrom || 0, m = o.stepMult || 1;
+    if (from > 0 && lotNo >= from) amt = o.stepMode === 'grow' ? o.amount * Math.pow(m, lotNo - from + 1) : o.amount * m;
   }
   var rf = o.reduceFrom || 0;
-  if (rf > 0 && lotNo >= rf && o.reducePct > 0) amt = amt * o.reducePct / 100;
+  if (rf > 0 && lotNo >= rf){
+    if (o.reduceAmt > 0) amt = o.reduceAmt;
+    else if (o.reducePct > 0) amt = amt * o.reducePct / 100;
+  }
   return amt;
 }
 
@@ -742,12 +741,12 @@ if (typeof module !== 'undefined') module.exports = {
     minpnl: '기간 중 누적 손익이 가장 낮았던 값입니다. 가장 힘들었던 순간에 평가 손실이 얼마였는지 보여 줍니다.',
     trades: '매수와 매도가 체결된 횟수입니다. 차수별 매도 방식에서는 팔린 차수마다 1회로 셉니다.',
     maxlots: '동시에 들고 있었던 최대 차수입니다. 최대 차수 설정에 자주 닿는다면 한도가 수익에 영향을 주고 있다는 뜻입니다.',
-    blocked: '하락 조건은 맞았지만 최대 차수·투자 한도·비중 한도에 걸려 사지 못한 날 수입니다.',
+    blocked: '하락 조건은 맞았지만 최대 차수·총 투자 한도에 걸려 사지 못한 날 수입니다.',
     open: '마지막 날 아직 팔지 않고 들고 있는 차수와 평단입니다.',
     stops: '손절 조건이나 최대 보유 기간에 걸려 청산한 횟수입니다.',
     cycle: '보유가 0에서 시작해 다시 0이 될 때까지를 한 사이클로 봅니다. 1차수에서 끝난 사이클은 처음 산 뒤 추가 매수 없이 바로 목표에 도달한 경우입니다.',
     cmp: '최대 투입금을 계좌로 놓고 비교합니다. 전략은 필요할 때만 투입하고 나머지는 현금(이자 0)으로 두며, 단순 보유는 첫날 전액을 사서 끝까지 듭니다. 낙폭은 계좌 평가액 기준입니다.',
-    hm: '다른 설정은 그대로 두고 하락률과 상승률만 바꿔 본 수익률입니다. 인접한 칸들이 비슷하면 안정적이고, 한 칸만 튀면 우연일 수 있습니다.',
+    hm: '다른 설정은 그대로 두고 하락률과 상승률만 바꿔 본 순손익(금액)입니다. ★ 가 가장 많이 번 조합이고, 인접한 칸들도 비슷하면 안정적이며 한 칸만 튀면 우연일 수 있습니다.',
     wf: '기간을 앞뒤로 나눠 앞 구간에서 가장 좋았던 조합이 뒤 구간에서도 좋은지 봅니다. 앞뒤 순위가 비슷할수록 특정 기간에만 맞춘 설정일 가능성이 낮습니다.',
     zoom: '차트 위를 드래그하면 그 구간이 확대되고, 더블클릭하거나 확대 해제를 누르면 돌아옵니다.'
   };
@@ -779,7 +778,7 @@ if (typeof module !== 'undefined') module.exports = {
     if (CUR === 'USD'){
       if (a >= 1e6) return s + '$' + (a / 1e6).toFixed(a >= 1e7 ? 0 : 1) + 'M';
       if (a >= 1e3) return s + '$' + (a / 1e3).toFixed(a >= 1e4 ? 0 : 1) + 'K';
-      return s + '$' + a;
+      return s + '$' + Math.round(a);
     }
     if (a >= 1e8) return s + (a / 1e8).toFixed(a >= 1e9 ? 0 : 1) + '억';
     if (a >= 1e4) return s + Math.round(a / 1e4).toLocaleString('ko-KR') + '만';
@@ -789,6 +788,7 @@ if (typeof module !== 'undefined') module.exports = {
     if (CUR === 'USD') return '$' + (n >= 100 ? Math.round(n) : n.toFixed(1));
     return Math.round(n).toLocaleString('ko-KR');
   }
+  function cmoney(n){ return (n > 0 ? '+' : n < 0 ? '-' : '') + axisMoney(Math.abs(n)); }
   function pct(n, sign){ return (sign && n > 0 ? '+' : '') + n.toFixed(1) + '%'; }
   function cls(n){ return n > 0 ? 'up' : n < 0 ? 'down' : ''; }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -813,6 +813,36 @@ if (typeof module !== 'undefined') module.exports = {
     });
     $('amtClear').addEventListener('click', function(){ $('amount').value = ''; amtTouched = true; $('amount').focus(); render(); });
   }
+  function addChips(host, input, after){
+    host.innerHTML = '<span class="lab">금액 더하기</span>' + CHIPS[CUR].map(function(v){
+      return '<button type="button" class="chip" data-v="' + v + '">+' + chipLabel(v) + '</button>';
+    }).join('') + '<button type="button" class="chip" data-clear="1">지우기</button>';
+    host.querySelectorAll('[data-v]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var c = parseNum(input.value);
+        setMoney(input, (isFinite(c) ? c : 0) + (+b.dataset.v));
+        after();
+      });
+    });
+    host.querySelector('[data-clear]').addEventListener('click', function(){ input.value = ''; after(); input.focus(); });
+  }
+  function renderTiers(){
+    var host = $('tiers');
+    host.innerHTML = '';
+    TIERS.forEach(function(t, i){
+      var d = document.createElement('div'); d.className = 'tier';
+      d.innerHTML = '<div class="trow"><input type="number" class="tf" min="2" max="200" step="1" inputmode="numeric" placeholder="5" aria-label="증액 시작 차수"><span class="lab">차수부터 회당</span>' +
+        '<input type="text" class="ta num" inputmode="decimal" autocomplete="off" placeholder="금액" aria-label="이 차수부터의 회당 매수 금액"><button type="button" class="small td" aria-label="구간 삭제">삭제</button></div><div class="chips"></div>';
+      var tf = d.querySelector('.tf'), ta = d.querySelector('.ta');
+      tf.value = t.from; ta.value = t.amt;
+      tf.addEventListener('input', function(){ t.from = tf.value; schedule(); });
+      ta.addEventListener('input', function(){ fmtInput(ta); t.amt = ta.value; schedule(); });
+      d.querySelector('.td').addEventListener('click', function(){ TIERS.splice(i, 1); renderTiers(); render(); });
+      addChips(d.querySelector('.chips'), ta, function(){ t.amt = ta.value; render(); });
+      host.appendChild(d);
+    });
+  }
+  function buildRedChips(){ addChips($('redChips'), $('redAmt'), render); }
   function buildDateChips(){
     var host = $('dateChips');
     host.innerHTML = '<span class="lab">시작일 바로가기</span>' + [2000, 2010, 2020].map(function(y){
@@ -867,51 +897,61 @@ if (typeof module !== 'undefined') module.exports = {
   }
 
   /* ---------- 설정 읽기 / 저장용 스냅샷 ---------- */
-  var FIELDS = ['buyPct','sellPct','buyRef','sellRef','amount','maxLots','budget','fee','frac','stepFrom','stepMult','stepMode','fill','perDay','basis','stop','cool','hold','part','second','redFrom','redPct','acct','weight'];
+  var FIELDS = ['buyPct','sellPct','buyRef','sellRef','amount','maxLots','budget','fee','frac','fill','perDay','basis','stop','cool','hold','part','second','redFrom','redAmt'];
+  var TIERS = []; /* [{from, amt}] 문자열 */
   function getVals(){
     var v = { cur: CUR };
     FIELDS.forEach(function(id){ var el = $(id); v[id] = el.type === 'checkbox' ? el.checked : el.value; });
+    v.tiers = TIERS.map(function(t){ return { from: t.from, amt: t.amt }; });
     return v;
   }
   function setVals(v){
-    if (v.cur && v.cur !== CUR){ CUR = v.cur; $('cur').value = CUR; buildChips(); }
+    if (v.cur && v.cur !== CUR){ CUR = v.cur; $('cur').value = CUR; buildChips(); buildRedChips(); }
     FIELDS.forEach(function(id){
       if (v[id] == null) return;
       var el = $(id);
       if (el.type === 'checkbox') el.checked = !!v[id]; else el.value = v[id];
     });
-    if (v.stop > 0 || v.part < 100 || v.hold > 0 || v.redFrom > 0 || v.acct && parseNum(v.acct) > 0) $('adv').open = true;
+    TIERS = (v.tiers || []).map(function(t){ return { from: t.from, amt: t.amt }; });
+    renderTiers();
+    if (v.stop > 0 || v.part < 100 || v.hold > 0 || v.redFrom > 0) $('adv').open = true;
   }
   /* 값 묶음 → 엔진 옵션. cur 가 다르면 금액류를 환산 */
   function paramsFrom(v, toCur){
     var k = 1;
     if (toCur && v.cur && v.cur !== toCur) k = toCur === 'KRW' ? FX_NOTE : 1 / FX_NOTE;
+    var tiers = [];
+    (v.tiers || []).forEach(function(t){
+      var f = parseInt(t.from, 10), a = parseNum(t.amt);
+      if (isFinite(f) && a > 0) tiers.push({ from: f, amount: a * k });
+    });
     var o = {
       buyPct: parseFloat(v.buyPct), sellPct: parseFloat(v.sellPct), buyRef: v.buyRef, sellRef: v.sellRef,
       amount: parseNum(v.amount) * k, maxLots: parseInt(v.maxLots, 10),
       budget: (parseNum(v.budget) || 0) * k, feePct: parseFloat(v.fee) || 0, fractional: !!v.frac,
-      stepFrom: parseInt(v.stepFrom, 10) || 0, stepMult: parseFloat(v.stepMult), stepMode: v.stepMode,
+      tiers: tiers,
       fill: v.fill, perDay: parseInt(v.perDay, 10) || 1,
       stopPct: parseFloat(v.stop) || 0, cooldown: parseInt(v.cool, 10) || 0, maxHoldDays: parseInt(v.hold, 10) || 0,
       partialPct: parseFloat(v.part) || 100, secondSellPct: parseFloat(v.second) || 0,
-      reduceFrom: parseInt(v.redFrom, 10) || 0, reducePct: parseFloat(v.redPct) || 0,
-      acct: (parseNum(v.acct) || 0) * k, weightPct: parseFloat(v.weight) || 0
+      reduceFrom: parseInt(v.redFrom, 10) || 0, reduceAmt: (parseNum(v.redAmt) || 0) * k
     };
     if (!(o.buyPct > 0) || !(o.sellPct > 0)) return { error: '하락률과 상승률은 0보다 커야 합니다.' };
     if (o.buyPct >= 100) return { error: '하락률은 100% 미만으로 입력해 주세요.' };
     if (!(o.amount > 0)) return { error: '회당 매수 금액을 입력해 주세요.' };
     if (!(o.maxLots >= 1)) return { error: '최대 차수는 1 이상이어야 합니다.' };
-    if (o.stepFrom < 0) return { error: '증액 시작 차수는 0 이상이어야 합니다.' };
-    if (o.stepFrom > 0 && !(o.stepMult > 0)) return { error: '증액 배수는 0보다 커야 합니다.' };
-    if (!(o.stepFrom > 0)) o.stepMult = 1;
+    var seen = {};
+    for (var i = 0; i < tiers.length; i++){
+      if (tiers[i].from < 2) return { error: '증액 시작 차수는 2 이상이어야 합니다. (1차수는 위의 회당 매수 금액을 씁니다)' };
+      if (seen[tiers[i].from]) return { error: '증액 구간에 같은 차수(' + tiers[i].from + ')가 두 번 있습니다.' };
+      seen[tiers[i].from] = 1;
+    }
+    tiers.sort(function(x, y){ return x.from - y.from; });
     if (o.perDay < 1 || o.perDay > 20) return { error: '하루 최대 매수 차수는 1~20 사이로 입력해 주세요.' };
     if (o.stopPct < 0 || o.stopPct >= 100) return { error: '손절 비율은 0 이상 100 미만으로 입력해 주세요.' };
     if (o.cooldown < 0 || o.maxHoldDays < 0) return { error: '쉬는 거래일과 보유 기간은 0 이상이어야 합니다.' };
     if (o.partialPct < 1 || o.partialPct > 100) return { error: '첫 매도 비율은 1~100 사이로 입력해 주세요.' };
     if (o.partialPct < 100 && o.secondSellPct > 0 && o.secondSellPct <= o.sellPct) return { error: '나머지 목표 상승률은 첫 매도 상승률보다 커야 합니다.' };
-    if (o.reduceFrom < 0 || (o.reduceFrom > 0 && !(o.reducePct > 0 && o.reducePct <= 100))) return { error: '감액 후 금액은 1~100% 사이로 입력해 주세요.' };
-    if (o.acct > 0 && !(o.weightPct > 0 && o.weightPct <= 100)) return { error: '최대 비중은 1~100% 사이로 입력해 주세요.' };
-    if (!(o.acct > 0)) o.weightPct = 0;
+    if (o.reduceFrom < 0 || (o.reduceFrom > 0 && !(o.reduceAmt > 0))) return { error: '감액을 켜려면 감액 후 회당 금액을 입력해 주세요.' };
     return { o: o, basis: v.basis === 'raw' ? 'raw' : 'adj' };
   }
   function readParams(){ return paramsFrom(getVals()); }
@@ -1100,8 +1140,8 @@ if (typeof module !== 'undefined') module.exports = {
     LAST = { rows: rows, o: o, res: res, basis: basis };
     (function(){
       var el = $('stepHint'), runs = [], lim = Math.min(o.maxLots, 40), a, prev = null, from = 1;
-      var plain = !(o.stepFrom > 0) && !(o.reduceFrom > 0);
-      if (plain){ el.textContent = '지금은 모든 차수에 같은 금액을 넣습니다.'; return; }
+      var plain = !(o.tiers && o.tiers.length) && !(o.reduceFrom > 0);
+      if (plain){ el.textContent = '지금은 모든 차수에 같은 금액을 넣습니다.' + (TIERS.length ? ' (금액을 입력한 구간부터 적용됩니다.)' : ''); return; }
       for (var n = 1; n <= lim + 1; n++){
         a = n <= lim ? lotAmount(o, n) : null;
         if (prev !== null && a !== prev){ runs.push((from === n - 1 ? from : from + '~' + (n - 1)) + '차수 ' + money(prev)); from = n; }
@@ -1113,8 +1153,8 @@ if (typeof module !== 'undefined') module.exports = {
     var diff = res.retPct - res.bhPct;
 
     var h = '';
-    if (!res.nBuy) h += '<div class="sample-note">매수가 한 번도 일어나지 않았습니다. 회당 매수 금액이 총 투자 한도·비중 한도나 종목 가격보다 큰지 확인해 주세요.</div>';
-    if (SAMPLE) h += '<div class="sample-note">지금은 가상으로 만든 예시 데이터를 쓰고 있어서 실제 종목의 결과가 아닙니다. CSV를 불러오면 바뀝니다.</div>';
+    if (!res.nBuy) h += '<div class="sample-note">매수가 한 번도 일어나지 않았습니다. 회당 매수 금액이 총 투자 한도나 종목 가격보다 큰지 확인해 주세요.</div>';
+    if (SAMPLE) h += '<div class="sample-note">저장된 종목 데이터(data 폴더)를 불러오지 못해 가상의 예시 데이터를 보여 주고 있습니다. 실제 종목의 결과가 아닙니다.</div>';
     h += '<div class="headline"><span class="lab">' + esc(name) + ' · ' + rows[0].d + ' ~ ' + rows[rows.length - 1].d + ' (' + res.years.toFixed(1) + '년) · 순손익' + info('pnl') + '</span>' +
          '<div class="big ' + cls(res.totalPnl) + '" id="bigPnl">' + money(res.totalPnl, true) + '</div>' +
          '<div class="sub">최대 투입금 대비 <b class="' + cls(res.retPct) + '">' + pct(res.retPct, true) + '</b> · 같은 금액을 첫날 전부 사서 보유했다면 <b class="' + cls(res.bhPct) + '">' + pct(res.bhPct, true) + '</b> (' +
@@ -1156,17 +1196,15 @@ if (typeof module !== 'undefined') module.exports = {
     h += '<section><h3>누적 손익</h3>' +
          '<div class="legend"><span><i style="border-color:var(--accent)"></i>분할매수 전략</span><span><i style="border-color:var(--muted);border-top-style:dashed"></i>단순 보유 (같은 최대 투입금)</span></div>' +
          '<div class="readout" id="ro2"></div><div class="chart" id="c2"></div></section>';
-    h += '<section><h3>하락률 × 상승률 비교' + info('hm') + '</h3><p class="hint">다른 설정은 그대로 두고 두 비율만 바꿔 본 최대 투입금 대비 수익률입니다. 칸을 누르면 그 값이 적용됩니다.</p>' +
-         '<div class="scroll" id="hm"></div></section>';
+    h += '<section><h3>하락률 × 상승률 비교' + info('hm') + '</h3><p class="hint">다른 설정은 그대로 두고 두 비율만 바꿔 본 <b>순손익(금액)</b>입니다. ★ 가 가장 많이 번 조합이고, 칸을 누르면 그 값이 적용됩니다.</p>' +
+         '<div class="scroll" id="hm"></div><p class="hint" id="hmBest" style="margin-top:8px"></p></section>';
     h += '<section><h3>과최적화 점검' + info('wf') + '</h3><div class="box" id="wf"></div></section>';
     h += '<section><h3>저장한 설정과 나란히 비교</h3><p class="hint">지금 설정에 이름을 붙여 저장해 두면, 같은 종목·같은 기간에서 저장한 설정들의 결과를 한 표로 볼 수 있습니다. 이 브라우저에만 저장됩니다.</p>' +
          '<div class="inl"><input type="text" id="pname" placeholder="설정 이름 (예: -5/+10 기본)" maxlength="30"><button type="button" class="primary" id="psave">현재 설정 저장</button></div>' +
          '<div class="scroll" id="plist"></div></section>';
     if (SAVED.length){
-      h += '<section><h3>여러 종목 한 번에 비교</h3><p class="hint">지금 설정과 기간(시작일·종료일)을 저장된 종목마다 똑같이 적용합니다. 통화가 다르면 금액을 1달러=1,000원으로 환산합니다.</p>' +
-           '<div class="tk" id="tk">' + SAVED.map(function(e, i){ return '<label><input type="checkbox" data-i="' + i + '" checked>' + esc(e.name || e.t.toUpperCase()) + '</label>'; }).join('') + '</div>' +
-           '<div class="inl"><button type="button" class="primary" id="mrun">비교 실행</button><span class="hint" id="mmsg"></span></div>' +
-           '<div class="scroll" id="mres"></div></section>';
+      h += '<section><h3>여러 종목 한 번에 비교</h3><p class="hint">지금 설정과 기간(시작일·종료일)을 저장된 종목 전부에 똑같이 적용한 결과입니다. 통화가 다르면 금액을 1달러=1,000원으로 환산합니다.</p>' +
+           '<p class="hint" id="mmsg"></p><div class="scroll" id="mres"></div></section>';
     }
     h += '<section><h3>매매 내역</h3><div class="inl"><span class="hint" id="logHint"></span>' +
          '<button type="button" class="small" id="expCsv">매매 내역 CSV</button><button type="button" class="small" id="expPng">결과 이미지(PNG)</button></div>' +
@@ -1175,10 +1213,10 @@ if (typeof module !== 'undefined') module.exports = {
          '<li>' + (o.fill === 'open' && !noOpen ? '신호는 종가로 판단하고, <b>다음 거래일 시가</b>에 체결합니다. 마지막 날의 신호는 체결되지 않습니다.' : '종가 기준으로 신호를 판단하고 같은 날 종가에 체결합니다.') + ' 하루에 최대 ' + o.perDay + '차수까지 매수합니다. 매도한 날에는 매수하지 않습니다.</li>' +
          '<li>첫날 1차수를 사고, 전량 매도 후에는 다음 거래일에 다시 1차수로 시작합니다.</li>' +
          '<li>가격은 ' + (basis === 'raw' ? '<b>원종가</b>(배당 미반영 실제 시세)' : '<b>수정종가</b>(배당 반영, 실제 시세와 다를 수 있음)') + '를 씁니다.</li>' +
-         '<li>증액·감액은 "보유 중인 차수"를 기준으로 금액이 정해집니다. 일부를 팔아 차수가 줄면 다음 매수 금액도 그 차수의 금액으로 돌아갑니다.</li>' +
+         '<li>차수별 금액(증액 구간·감액)은 "보유 중인 차수"를 기준으로 정해집니다. 일부를 팔아 차수가 줄면 다음 매수 금액도 그 차수의 금액으로 돌아갑니다.</li>' +
          '<li>손절은 평단 대비 하락률이 넘으면 전량을 청산하고 입력한 거래일만큼 쉽니다. 최대 보유 기간은 첫 매수일부터 센 달력 일수입니다.</li>' +
          '<li>분할 매도는 목표 도달 시 일부만 팔고 남은 물량은 나머지 목표에서 모두 팝니다. 정수 주수 모드에서는 내림 처리합니다.</li>' +
-         '<li>하락 조건을 만족해도 최대 차수, 총 한도, 비중 한도에 걸리면 사지 않고 그 날수를 "한도로 건너뛴 날"에 셉니다.</li>' +
+         '<li>하락 조건을 만족해도 최대 차수나 총 투자 한도에 걸리면 사지 않고 그 날수를 "한도로 건너뛴 날"에 셉니다.</li>' +
          '<li>수익률은 보유 중인 원가가 가장 컸던 시점(최대 투입금) 기준입니다. 단순 보유 비교는 수수료를 제외합니다.</li>' +
          '<li>세금, 환율, 배당 재투자, 슬리피지는 반영하지 않았고, 과거 결과가 앞으로의 수익을 뜻하지는 않습니다.</li></ul></section>';
     out.innerHTML = h;
@@ -1192,21 +1230,22 @@ if (typeof module !== 'undefined') module.exports = {
     });
     drawCharts();
 
-    /* 히트맵 */
+    /* 히트맵: 칸 값은 순손익(금액), ★ 는 가장 많이 번 조합 */
     var bl = [2, 3, 5, 7, 10], sl = [5, 7, 10, 15, 20];
-    var sw = sweep(rows, o, bl, sl), maxAbs = 1;
-    sw.forEach(function(r){ r.forEach(function(c){ maxAbs = Math.max(maxAbs, Math.abs(c.ret)); }); });
+    var sw = sweep(rows, o, bl, sl), maxAbs = 1, best = null;
+    sw.forEach(function(r){ r.forEach(function(c){ maxAbs = Math.max(maxAbs, Math.abs(c.pnl)); if (!best || c.pnl > best.pnl) best = c; }); });
     var t = '<table class="hm"><thead><tr><th class="axis l">하락 \\ 상승</th>' + sl.map(function(s){ return '<th class="axis">+' + s + '%</th>'; }).join('') + '</tr></thead><tbody>';
     sw.forEach(function(r, ri){
       t += '<tr><th class="axis l">-' + bl[ri] + '%</th>';
       r.forEach(function(c){
         var cur = Math.abs(c.b - o.buyPct) < 1e-9 && Math.abs(c.s - o.sellPct) < 1e-9;
-        var a = Math.round(Math.min(1, Math.abs(c.ret) / maxAbs) * 55);
-        t += '<td class="cell' + (c.ret < 0 ? ' neg' : '') + (cur ? ' cur' : '') + '" tabindex="0" role="button" style="--a:' + a + '%" data-b="' + c.b + '" data-s="' + c.s + '" title="수익률 ' + pct(c.ret, true) + ' · 최대 투입금 ' + money(c.inv) + '">' + pct(c.ret, true) + '</td>';
+        var a = Math.round(Math.min(1, Math.abs(c.pnl) / maxAbs) * 55);
+        t += '<td class="cell' + (c.pnl < 0 ? ' neg' : '') + (cur ? ' cur' : '') + (c === best ? ' best' : '') + '" tabindex="0" role="button" style="--a:' + a + '%" data-b="' + c.b + '" data-s="' + c.s + '" title="순손익 ' + money(c.pnl, true) + ' · 수익률 ' + pct(c.ret, true) + ' · 최대 투입금 ' + money(c.inv) + '">' + (c === best ? '★ ' : '') + cmoney(c.pnl) + '</td>';
       });
       t += '</tr>';
     });
     $('hm').innerHTML = t + '</tbody></table>';
+    $('hmBest').innerHTML = '가장 많이 번 조합: 하락 <b>-' + best.b + '%</b> / 상승 <b>+' + best.s + '%</b> → 순손익 <b class="' + cls(best.pnl) + '">' + money(best.pnl, true) + '</b> (최대 투입금 대비 ' + pct(best.ret, true) + ')';
     $('hm').querySelectorAll('td.cell').forEach(function(td){
       var apply = function(){ $('buyPct').value = td.dataset.b; $('sellPct').value = td.dataset.s; render(); };
       td.addEventListener('click', apply);
@@ -1258,7 +1297,7 @@ if (typeof module !== 'undefined') module.exports = {
     });
 
     /* 여러 종목 비교 */
-    if ($('mrun')) $('mrun').addEventListener('click', function(){ runMulti(o, basis); });
+    if ($('mres')) runMulti(o, basis);
 
     /* 매매 내역 */
     var tr = res.trades, show = tr.slice(-300).reverse();
@@ -1276,24 +1315,27 @@ if (typeof module !== 'undefined') module.exports = {
   }
 
   /* ---------- 여러 종목 비교 ---------- */
+  var MSEQ = 0, MULTI_HTML = '';
   function runMulti(o, basis){
-    var picks = [].slice.call(document.querySelectorAll('#tk input:checked')).map(function(c){ return SAVED[+c.dataset.i]; });
-    var msg = $('mmsg'), host = $('mres');
-    if (!picks.length){ msg.textContent = '비교할 종목을 하나 이상 골라 주세요.'; return; }
-    msg.textContent = '불러오는 중...'; $('mrun').disabled = true;
+    var seq = ++MSEQ, host = $('mres'), msg = $('mmsg');
+    host.innerHTML = MULTI_HTML;
+    if (!MULTI_HTML) msg.textContent = '계산 중...';
     var s = $('start').value, e = $('end').value, results = [], bad = [];
     var chain = Promise.resolve();
-    picks.forEach(function(en){
-      chain = chain.then(function(){ return fetchSaved(en); }).then(function(all){
+    SAVED.forEach(function(en){
+      chain = chain.then(function(){ return seq === MSEQ ? fetchSaved(en) : null; }).then(function(all){
+        if (!all || seq !== MSEQ) return;
         var rows = all.filter(function(r){ return (!s || r.d >= s) && (!e || r.d <= e); });
         if (rows.length < 20){ bad.push((en.name || en.t) + ': 기간 데이터 부족'); return; }
         var c = entryCur(en), k = c === CUR ? 1 : (c === 'KRW' ? FX_NOTE : 1 / FX_NOTE);
-        var oo = Object.assign({}, o, { amount: o.amount * k, budget: o.budget * k, acct: o.acct * k });
+        var oo = Object.assign({}, o, { amount: o.amount * k, budget: o.budget * k, reduceAmt: o.reduceAmt * k,
+          tiers: (o.tiers || []).map(function(t){ return { from: t.from, amount: t.amount * k }; }) });
         var r = backtest(basisRows(rows, basis), oo);
         results.push({ en: en, c: c, r: r, from: rows[0].d, to: rows[rows.length - 1].d });
       }).catch(function(er){ bad.push((en.name || en.t) + ': ' + er.message); });
     });
     chain.then(function(){
+      if (seq !== MSEQ || !$('mres')) return;
       results.sort(function(a, b){ return b.r.retPct - a.r.retPct; });
       var t = '<table class="cmp"><thead><tr><th class="l">종목</th><th>기간</th><th>순손익</th><th>수익률</th><th>연환산</th><th>최대 낙폭</th><th>매수/매도</th><th>단순 보유</th><th>단순 보유 연환산</th></tr></thead><tbody>';
       results.forEach(function(x){
@@ -1303,9 +1345,9 @@ if (typeof module !== 'undefined') module.exports = {
           '<td class="mono">' + (r.cagr == null ? '-' : pct(r.cagr, true)) + '</td><td class="mono">-' + r.mddPct.toFixed(1) + '%</td><td class="mono">' + r.nBuy + ' / ' + r.nSell + '</td>' +
           '<td class="mono ' + cls(r.bhPct) + '">' + pct(r.bhPct, true) + '</td><td class="mono">' + (r.bhCagr == null ? '-' : pct(r.bhCagr, true)) + '</td></tr>';
       });
-      host.innerHTML = results.length ? t + '</tbody></table>' : '';
+      MULTI_HTML = results.length ? t + '</tbody></table>' : '';
+      host.innerHTML = MULTI_HTML;
       msg.textContent = results.length ? '수익률 순입니다.' + (bad.length ? ' 건너뜀: ' + bad.join(', ') : '') : (bad.join(', ') || '결과가 없습니다.');
-      $('mrun').disabled = false;
     });
   }
 
@@ -1397,22 +1439,16 @@ if (typeof module !== 'undefined') module.exports = {
       setData(p.rows, name, false, p.colName);
     } catch (e){ $('err').textContent = e.message; }
   }
-  $('file').addEventListener('change', function(ev){
-    var f = ev.target.files && ev.target.files[0];
-    if (!f) return;
-    var rd = new FileReader();
-    rd.onload = function(){ loadText(String(rd.result), f.name.replace(/\.[^.]+$/, '')); };
-    rd.onerror = function(){ $('err').textContent = '파일을 읽지 못했습니다. 다시 선택해 주세요.'; };
-    rd.readAsText(f);
-    ev.target.value = '';
-  });
-  $('useSample').addEventListener('click', function(){ setData(sampleData(), '예시 종목', true, ''); });
 
   $('cur').addEventListener('change', function(){
     var prev = CUR; CUR = $('cur').value;
     var curAmt = parseNum($('amount').value), ci = CHIPS[prev].indexOf(curAmt);
     if (curAmt === DEFAULTS[prev].amount) setMoney($('amount'), DEFAULTS[CUR].amount);
     else if (ci >= 0) setMoney($('amount'), CHIPS[CUR][ci]);
+    var kf = CUR === 'KRW' ? FX_NOTE : 1 / FX_NOTE;
+    TIERS.forEach(function(t){ var a = parseNum(t.amt); if (a > 0){ t.amt = Math.round(a * kf).toLocaleString('en-US'); } });
+    var ra = parseNum($('redAmt').value); if (ra > 0) setMoney($('redAmt'), Math.round(ra * kf));
+    renderTiers(); buildRedChips();
     buildChips();
     if (parseFloat($('fee').value) === DEFAULTS[prev].fee) $('fee').value = DEFAULTS[CUR].fee;
     render();
@@ -1422,7 +1458,7 @@ if (typeof module !== 'undefined') module.exports = {
     $(id).addEventListener('change', schedule);
   });
   ['start', 'end'].forEach(function(id){ $(id).addEventListener('change', function(){ VIEW = null; }); });
-  ['amount', 'budget', 'acct'].forEach(function(id){ $(id).addEventListener('input', function(){ if (id === 'amount') amtTouched = true; fmtInput($(id)); }); });
+  ['amount', 'budget', 'redAmt'].forEach(function(id){ $(id).addEventListener('input', function(){ if (id === 'amount') amtTouched = true; fmtInput($(id)); }); });
   var rt = null;
   window.addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(function(){ drawCharts(); }, 150); });
 
@@ -1474,7 +1510,6 @@ if (typeof module !== 'undefined') module.exports = {
         return '<option value="' + i + '">' + esc(e.name ? e.name + ' · ' + e.t.toUpperCase() : e.t.toUpperCase()) + '  ' + e.first + ' ~ ' + e.last + '</option>';
       }).join('');
       $('savedWrap').hidden = false;
-      if (LAST) render(); /* 종목 비교 섹션을 붙이기 위해 한 번 다시 그림 */
       sel.addEventListener('change', function(){
         var e = list[parseInt(sel.value, 10)];
         if (!e) return;
@@ -1485,11 +1520,19 @@ if (typeof module !== 'undefined') module.exports = {
           loadText(txt, e.name || e.t.toUpperCase());
         }).catch(function(er){ $('err').textContent = er.message; });
       });
+      if (SAMPLE){ sel.value = '0'; sel.dispatchEvent(new Event('change')); } else if (LAST) render();
     }).catch(function(){ /* data 폴더가 없으면 목록을 숨긴 채로 둠 */ });
   }
   loadSavedList();
 
   buildChips();
+  buildRedChips();
+  renderTiers();
+  $('tierAdd').addEventListener('click', function(){
+    var mx = 0; TIERS.forEach(function(t){ var f = parseInt(t.from, 10); if (f > mx) mx = f; });
+    TIERS.push({ from: String(mx ? mx + 3 : 5), amt: '' }); renderTiers(); render();
+    var ta = $('tiers').querySelectorAll('.ta'); if (ta.length) ta[ta.length - 1].focus();
+  });
   buildDateChips();
   buildCrisisChips();
   setData(sampleData(), '예시 종목', true, '');
