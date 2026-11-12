@@ -160,8 +160,8 @@ table.cmp tr.cur td{background:var(--chip)}
         <h2>종목과 데이터</h2>
         <div class="row">
           <div class="field"><label for="ticker">종목명 / 티커</label><input type="text" id="ticker" value="예시 종목"></div>
-          <div class="field"><label for="cur">통화</label>
-            <select id="cur"><option value="KRW">원 (KRW)</option><option value="USD">달러 (USD)</option></select></div>
+          <div class="field"><label for="cur">시장</label>
+            <select id="cur"><option value="KRW">한국주식 (원)</option><option value="USD">미국주식 (달러)</option></select></div>
         </div>
         <div class="field" id="savedWrap" hidden><label for="saved">저장된 종목 (매일 자동 갱신)</label><select id="saved"></select></div>
         <p class="hint" id="status" hidden></p>
@@ -223,6 +223,9 @@ table.cmp tr.cur td{background:var(--chip)}
             <select id="basis"><option value="adj">수정종가 (배당 반영)</option><option value="raw">원종가 (실제 시세)</option></select></div>
         </div>
         <div class="field"><label for="fee">매매 수수료 (편도 %)</label><input type="number" id="fee" value="0.05" min="0" max="5" step="any" inputmode="decimal"></div>
+        <label class="check"><input type="checkbox" id="tax"> 세금 반영 (미국주식만)</label>
+        <div class="field"><label for="taxPct">세율 (%)</label><input type="number" id="taxPct" value="22" min="0" max="100" step="any" inputmode="decimal"></div>
+        <p class="hint" id="taxHint"></p>
         <label class="check"><input type="checkbox" id="frac"> 소수점 매수 허용</label>
         <p class="hint">끄면 회당 금액으로 살 수 있는 정수 주수만 매수합니다.</p>
         <p class="hint warn" id="fillWarn" hidden></p>
@@ -437,6 +440,7 @@ function backtest(rows, o){
   var trades = [], curve = [];
   var pending = null, partDone = false, cycleStart = null, cooldownUntil = -1;
   var nStop = 0, nTime = 0;
+  var taxRate = o.taxPct > 0 ? o.taxPct / 100 : 0, taxDed = o.taxDeduction > 0 ? o.taxDeduction : 0, yearGain = 0, taxPaid = 0;
 
   function stats(){
     var sh = 0, val = 0, cost = 0;
@@ -493,7 +497,7 @@ function backtest(rows, o){
       if (!(shs > 0)) return;
       var f = Math.min(1, shs / l.sh), costPart = l.cost * f;
       var proceeds = shs * price * (1 - fee), pnl = proceeds - costPart;
-      realized += pnl; invested -= costPart;
+      realized += pnl; yearGain += pnl; invested -= costPart;
       l.sh -= shs; l.cost -= costPart;
       if (it.setPart) l.part = true;
       tot.sh += shs; tot.amt += shs * price; tot.pnl += pnl;
@@ -579,7 +583,11 @@ function backtest(rows, o){
 
     var mv = 0;
     for (k = 0; k < lots.length; k++) mv += lots[k].sh * c;
-    curve.push({ d: d, c: c, pnl: realized + (mv - invested), inv: invested, n: lots.length });
+    /* 세금: 그 해 마지막 거래일에 (연간 실현손익 - 공제) x 세율을 낸 것으로 계산 (손실은 같은 해 안에서만 상계) */
+    if (taxRate > 0 && (i === n - 1 || rows[i + 1].d.slice(0, 4) !== d.slice(0, 4))){
+      taxPaid += Math.max(0, yearGain - taxDed) * taxRate; yearGain = 0;
+    }
+    curve.push({ d: d, c: c, pnl: realized - taxPaid + (mv - invested), inv: invested, n: lots.length });
   }
 
   var last = curve[n - 1];
@@ -612,7 +620,7 @@ function backtest(rows, o){
 
   return {
     trades: trades, curve: curve, bh: bh,
-    totalPnl: totalPnl, realized: realized, unrealized: totalPnl - realized,
+    totalPnl: totalPnl, realized: realized, taxPaid: taxPaid, unrealized: totalPnl + taxPaid - realized,
     maxInvested: maxInvested, retPct: retPct, cagr: cagr, years: years,
     mdd: mdd, mddPct: mdd / base * 100, minPnl: minPnl, minPnlPct: minPnl / base * 100,
     bhPnl: bh[bh.length - 1], bhPct: (bhRatio - 1) * 100, bhCagr: bhCagr,
@@ -743,11 +751,11 @@ if (typeof module !== 'undefined') module.exports = {
     maxlots: '동시에 들고 있었던 최대 차수입니다. 최대 차수 설정에 자주 닿는다면 한도가 수익에 영향을 주고 있다는 뜻입니다.',
     blocked: '하락 조건은 맞았지만 최대 차수·총 투자 한도에 걸려 사지 못한 날 수입니다.',
     open: '마지막 날 아직 팔지 않고 들고 있는 차수와 평단입니다.',
+    tax: '해외주식 양도소득세 추정액의 합계입니다. 순손익과 낙폭, 수익률은 이 세금을 뺀 값입니다. 실현 손익은 세금을 빼기 전 금액입니다.',
     stops: '손절 조건이나 최대 보유 기간에 걸려 청산한 횟수입니다.',
     cycle: '보유가 0에서 시작해 다시 0이 될 때까지를 한 사이클로 봅니다. 1차수에서 끝난 사이클은 처음 산 뒤 추가 매수 없이 바로 목표에 도달한 경우입니다.',
     cmp: '최대 투입금을 계좌로 놓고 비교합니다. 전략은 필요할 때만 투입하고 나머지는 현금(이자 0)으로 두며, 단순 보유는 첫날 전액을 사서 끝까지 듭니다. 낙폭은 계좌 평가액 기준입니다.',
     hm: '다른 설정은 그대로 두고 하락률과 상승률만 바꿔 본 순손익(금액)입니다. ★ 가 가장 많이 번 조합이고, 인접한 칸들도 비슷하면 안정적이며 한 칸만 튀면 우연일 수 있습니다.',
-    wf: '기간을 앞뒤로 나눠 앞 구간에서 가장 좋았던 조합이 뒤 구간에서도 좋은지 봅니다. 앞뒤 순위가 비슷할수록 특정 기간에만 맞춘 설정일 가능성이 낮습니다.',
     zoom: '차트 위를 드래그하면 그 구간이 확대되고, 더블클릭하거나 확대 해제를 누르면 돌아옵니다.'
   };
   function info(k){ return '<button type="button" class="info" data-i="' + k + '" aria-label="' + esc(INFO[k]) + '">ⓘ</button>'; }
@@ -897,7 +905,7 @@ if (typeof module !== 'undefined') module.exports = {
   }
 
   /* ---------- 설정 읽기 / 저장용 스냅샷 ---------- */
-  var FIELDS = ['buyPct','sellPct','buyRef','sellRef','amount','maxLots','budget','fee','frac','fill','perDay','basis','stop','cool','hold','part','second','redFrom','redAmt'];
+  var FIELDS = ['buyPct','sellPct','buyRef','sellRef','amount','maxLots','budget','fee','tax','taxPct','frac','fill','perDay','basis','stop','cool','hold','part','second','redFrom','redAmt'];
   var TIERS = []; /* [{from, amt}] 문자열 */
   function getVals(){
     var v = { cur: CUR };
@@ -920,6 +928,7 @@ if (typeof module !== 'undefined') module.exports = {
   function paramsFrom(v, toCur){
     var k = 1;
     if (toCur && v.cur && v.cur !== toCur) k = toCur === 'KRW' ? FX_NOTE : 1 / FX_NOTE;
+    var stockCur = toCur || v.cur || CUR, taxRate = parseFloat(v.taxPct) || 0;
     var tiers = [];
     (v.tiers || []).forEach(function(t){
       var f = parseInt(t.from, 10), a = parseNum(t.amt);
@@ -933,7 +942,8 @@ if (typeof module !== 'undefined') module.exports = {
       fill: v.fill, perDay: parseInt(v.perDay, 10) || 1,
       stopPct: parseFloat(v.stop) || 0, cooldown: parseInt(v.cool, 10) || 0, maxHoldDays: parseInt(v.hold, 10) || 0,
       partialPct: parseFloat(v.part) || 100, secondSellPct: parseFloat(v.second) || 0,
-      reduceFrom: parseInt(v.redFrom, 10) || 0, reduceAmt: (parseNum(v.redAmt) || 0) * k
+      reduceFrom: parseInt(v.redFrom, 10) || 0, reduceAmt: (parseNum(v.redAmt) || 0) * k,
+      taxPct: (v.tax && stockCur === 'USD') ? taxRate : 0, taxDeduction: (v.tax && stockCur === 'USD') ? 2500 : 0
     };
     if (!(o.buyPct > 0) || !(o.sellPct > 0)) return { error: '하락률과 상승률은 0보다 커야 합니다.' };
     if (o.buyPct >= 100) return { error: '하락률은 100% 미만으로 입력해 주세요.' };
@@ -951,8 +961,16 @@ if (typeof module !== 'undefined') module.exports = {
     if (o.cooldown < 0 || o.maxHoldDays < 0) return { error: '쉬는 거래일과 보유 기간은 0 이상이어야 합니다.' };
     if (o.partialPct < 1 || o.partialPct > 100) return { error: '첫 매도 비율은 1~100 사이로 입력해 주세요.' };
     if (o.partialPct < 100 && o.secondSellPct > 0 && o.secondSellPct <= o.sellPct) return { error: '나머지 목표 상승률은 첫 매도 상승률보다 커야 합니다.' };
+    if (taxRate < 0 || taxRate > 100) return { error: '세율은 0~100% 사이로 입력해 주세요.' };
     if (o.reduceFrom < 0 || (o.reduceFrom > 0 && !(o.reduceAmt > 0))) return { error: '감액을 켜려면 감액 후 회당 금액을 입력해 주세요.' };
-    return { o: o, basis: v.basis === 'raw' ? 'raw' : 'adj' };
+    return { o: o, basis: v.basis === 'raw' ? 'raw' : 'adj', tax: { on: !!v.tax, rate: taxRate } };
+  }
+  function syncTax(){
+    var us = CUR === 'USD';
+    $('tax').disabled = !us; $('taxPct').disabled = !us || !$('tax').checked;
+    $('taxHint').textContent = us
+      ? '해외주식 양도소득세 방식입니다. 그 해의 매도 손익을 모두 합쳐(손실은 같은 해 안에서 상계) 250만원(1달러=1,000원 가정, $2,500)을 공제한 뒤 세율을 곱해, 매년 마지막 거래일에 낸 것으로 계산합니다. 보유 중인 평가이익에는 세금이 없습니다.'
+      : '한국 주식은 일반 개인의 매매차익이 비과세라 세금 없이 계산합니다. 증권거래세가 걱정되면 수수료에 합쳐서 넣어 주세요.';
   }
   function readParams(){ return paramsFrom(getVals()); }
 
@@ -1072,14 +1090,6 @@ if (typeof module !== 'undefined') module.exports = {
         $('ro1').textContent = c.d + ' · 종가 ' + price(c.c) + ' · 보유 ' + c.n + '차수';
       }
     });
-    drawChart($('c2'), {
-      h: 260, ml: 58, dates: dates, label: '누적 손익 차트', yfmt: axisMoney, zero: true,
-      series: [{ vals: res.bh, cls: 'l-bh' }, { vals: res.curve.map(function(r){ return r.pnl; }), cls: 'l-strat' }],
-      onHover: function(i){
-        var j = i == null ? rows.length - 1 : i, c = res.curve[j];
-        $('ro2').textContent = c.d + ' · 전략 ' + money(c.pnl, true) + ' · 단순 보유 ' + money(res.bh[j], true) + ' · 투입 중 ' + money(c.inv);
-      }
-    });
     var vi = viewIdx(dates);
     $('zr').textContent = VIEW ? dates[vi[0]] + ' ~ ' + dates[vi[1]] : '전체 기간';
     document.querySelectorAll('.zbar [data-z]').forEach(function(b){
@@ -1128,6 +1138,7 @@ if (typeof module !== 'undefined') module.exports = {
   function render(){
     var out = $('out'), err = $('err');
     err.textContent = '';
+    syncTax();
     var pr = readParams();
     if (pr.error){ err.textContent = pr.error; return; }
     var rawRows = slice();
@@ -1155,7 +1166,7 @@ if (typeof module !== 'undefined') module.exports = {
     var h = '';
     if (!res.nBuy) h += '<div class="sample-note">매수가 한 번도 일어나지 않았습니다. 회당 매수 금액이 총 투자 한도나 종목 가격보다 큰지 확인해 주세요.</div>';
     if (SAMPLE) h += '<div class="sample-note">저장된 종목 데이터(data 폴더)를 불러오지 못해 가상의 예시 데이터를 보여 주고 있습니다. 실제 종목의 결과가 아닙니다.</div>';
-    h += '<div class="headline"><span class="lab">' + esc(name) + ' · ' + rows[0].d + ' ~ ' + rows[rows.length - 1].d + ' (' + res.years.toFixed(1) + '년) · 순손익' + info('pnl') + '</span>' +
+    h += '<div class="headline"><span class="lab">' + esc(name) + ' · ' + rows[0].d + ' ~ ' + rows[rows.length - 1].d + ' (' + res.years.toFixed(1) + '년) · 순손익' + (o.taxPct > 0 ? ' (세금 반영)' : '') + info('pnl') + '</span>' +
          '<div class="big ' + cls(res.totalPnl) + '" id="bigPnl">' + money(res.totalPnl, true) + '</div>' +
          '<div class="sub">최대 투입금 대비 <b class="' + cls(res.retPct) + '">' + pct(res.retPct, true) + '</b> · 같은 금액을 첫날 전부 사서 보유했다면 <b class="' + cls(res.bhPct) + '">' + pct(res.bhPct, true) + '</b> (' +
          'Δ ' + Math.abs(diff).toFixed(1) + '%p, 전략이 ' + (diff >= 0 ? '높음' : '낮음') + ')</div></div>';
@@ -1172,6 +1183,7 @@ if (typeof module !== 'undefined') module.exports = {
       ['한도로 건너뛴 날', res.blockedDays + '일', 'blocked'],
       ['종료 시점 보유', res.openLots ? res.openLots + '차수 · 평단 ' + price(res.openAvg) : '없음', 'open']
     ];
+    if (o.taxPct > 0) k.push(['납부 세금 (추정)', '<span class="down">' + money(-res.taxPaid) + '</span>', 'tax']);
     if (o.stopPct > 0 || o.maxHoldDays > 0) k.push(['손절 / 기간 청산', res.nStop + ' / ' + res.nTime + '회', 'stops']);
     h += '<dl class="kpi">' + k.map(function(x){ return '<div><dt>' + x[0] + info(x[2]) + '</dt><dd>' + x[1] + '</dd></div>'; }).join('') + '</dl>';
 
@@ -1193,17 +1205,13 @@ if (typeof module !== 'undefined') module.exports = {
          [1, 3, 5, 10].map(function(y){ return '<button type="button" class="chip" data-z="' + y + '" aria-pressed="false">최근 ' + y + '년</button>'; }).join('') +
          '<button type="button" class="chip" data-z="reset">확대 해제</button><span class="zr" id="zr"></span></div>' +
          '<div class="readout" id="ro1"></div><div class="chart" id="c1"></div></section>';
-    h += '<section><h3>누적 손익</h3>' +
-         '<div class="legend"><span><i style="border-color:var(--accent)"></i>분할매수 전략</span><span><i style="border-color:var(--muted);border-top-style:dashed"></i>단순 보유 (같은 최대 투입금)</span></div>' +
-         '<div class="readout" id="ro2"></div><div class="chart" id="c2"></div></section>';
     h += '<section><h3>하락률 × 상승률 비교' + info('hm') + '</h3><p class="hint">다른 설정은 그대로 두고 두 비율만 바꿔 본 <b>순손익(금액)</b>입니다. ★ 가 가장 많이 번 조합이고, 칸을 누르면 그 값이 적용됩니다.</p>' +
          '<div class="scroll" id="hm"></div><p class="hint" id="hmBest" style="margin-top:8px"></p></section>';
-    h += '<section><h3>과최적화 점검' + info('wf') + '</h3><div class="box" id="wf"></div></section>';
     h += '<section><h3>저장한 설정과 나란히 비교</h3><p class="hint">지금 설정에 이름을 붙여 저장해 두면, 같은 종목·같은 기간에서 저장한 설정들의 결과를 한 표로 볼 수 있습니다. 이 브라우저에만 저장됩니다.</p>' +
          '<div class="inl"><input type="text" id="pname" placeholder="설정 이름 (예: -5/+10 기본)" maxlength="30"><button type="button" class="primary" id="psave">현재 설정 저장</button></div>' +
          '<div class="scroll" id="plist"></div></section>';
     if (SAVED.length){
-      h += '<section><h3>여러 종목 한 번에 비교</h3><p class="hint">지금 설정과 기간(시작일·종료일)을 저장된 종목 전부에 똑같이 적용한 결과입니다. 통화가 다르면 금액을 1달러=1,000원으로 환산합니다.</p>' +
+      h += '<section><h3>여러 종목 한 번에 비교</h3><p class="hint">지금 설정과 기간(시작일·종료일)을 저장된 종목 전부에 똑같이 적용한 결과입니다. 통화가 다르면 금액을 1달러=1,000원으로 환산하고, 세금 반영을 켰다면 미국 종목에만 적용합니다.</p>' +
            '<p class="hint" id="mmsg"></p><div class="scroll" id="mres"></div></section>';
     }
     h += '<section><h3>매매 내역</h3><div class="inl"><span class="hint" id="logHint"></span>' +
@@ -1218,7 +1226,8 @@ if (typeof module !== 'undefined') module.exports = {
          '<li>분할 매도는 목표 도달 시 일부만 팔고 남은 물량은 나머지 목표에서 모두 팝니다. 정수 주수 모드에서는 내림 처리합니다.</li>' +
          '<li>하락 조건을 만족해도 최대 차수나 총 투자 한도에 걸리면 사지 않고 그 날수를 "한도로 건너뛴 날"에 셉니다.</li>' +
          '<li>수익률은 보유 중인 원가가 가장 컸던 시점(최대 투입금) 기준입니다. 단순 보유 비교는 수수료를 제외합니다.</li>' +
-         '<li>세금, 환율, 배당 재투자, 슬리피지는 반영하지 않았고, 과거 결과가 앞으로의 수익을 뜻하지는 않습니다.</li></ul></section>';
+         '<li>' + (o.taxPct > 0 ? '세금은 해외주식 양도소득세 방식(연간 합산, 250만원 공제, 매년 마지막 거래일 납부)으로 뺐고, 단순 보유 비교에는 세금을 반영하지 않았습니다(팔기 전까지 과세 이연). ' : '세금은 반영하지 않았고, ') + '환율, 배당 재투자, 슬리피지도 반영하지 않았습니다.</li>' +
+         '<li>' + ' 과거 결과가 앞으로의 수익을 뜻하지는 않습니다.</li></ul></section>';
     out.innerHTML = h;
 
     /* 차트 */
@@ -1252,23 +1261,6 @@ if (typeof module !== 'undefined') module.exports = {
       td.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); apply(); } });
     });
 
-    /* 과최적화 점검 */
-    (function(){
-      var wf = walkForward(rows, o, bl, sl, 0.5), el = $('wf');
-      if (!wf){ el.innerHTML = '<span class="mut">기간이 짧아(앞뒤 각각 일봉 40개 이상 필요) 점검할 수 없습니다.</span>'; return; }
-      var c = wf.corr, ba = wf.bestA, tone, bad = ba.rankB > wf.cellCount / 2;
-      if (c == null) tone = '두 구간의 결과가 모두 같아 비교할 수 없습니다.';
-      else if (c >= 0.6 && !bad) tone = '앞뒤 구간에서 좋은 조합이 대체로 일치합니다. 특정 기간에만 맞춘 설정일 가능성은 낮은 편입니다.';
-      else if (c >= 0.3) tone = '앞뒤 구간의 결과가 어느 정도만 일치합니다. 최고 수익 조합보다 주변 조합과 함께 안정적인 값을 고르는 편이 안전합니다.';
-      else tone = '앞뒤 구간의 순위가 거의 따로 움직입니다. 지금의 "좋은 조합"은 특정 기간에 맞춰진 우연일 수 있습니다.';
-      el.innerHTML = '<span class="mut">기간을 반으로 나눠 하락 × 상승 ' + wf.cellCount + '개 조합을 각각 돌렸습니다.</span><br>' +
-        '앞 구간 <b>' + wf.a.from + ' ~ ' + wf.a.to + '</b>, 뒤 구간 <b>' + wf.b.from + ' ~ ' + wf.b.to + '</b><br>' +
-        '앞 구간 1위 조합 <b>-' + ba.b + '% / +' + ba.s + '%</b> (앞 구간 <b class="' + cls(ba.retA) + '">' + pct(ba.retA, true) + '</b>) → 뒤 구간에서는 <b class="' + cls(ba.retB) + '">' + pct(ba.retB, true) + '</b>, ' + wf.cellCount + '개 중 <b>' + ba.rankB + '위</b><br>' +
-        '두 구간 순위의 상관계수 <b>' + (c == null ? '-' : c.toFixed(2)) + '</b> · 조합 평균 수익률 앞 ' + pct(wf.meanA, true) + ' / 뒤 ' + pct(wf.meanB, true) + '<br>' +
-        '지금 설정: 앞 <b class="' + cls(wf.cur.retA) + '">' + pct(wf.cur.retA, true) + '</b> / 뒤 <b class="' + cls(wf.cur.retB) + '">' + pct(wf.cur.retB, true) + '</b>' +
-        '<p class="verdict">' + tone + '</p>';
-    })();
-
     /* 저장한 설정 비교 */
     function drawPresets(){
       var list = loadPresets(), body = '';
@@ -1297,7 +1289,7 @@ if (typeof module !== 'undefined') module.exports = {
     });
 
     /* 여러 종목 비교 */
-    if ($('mres')) runMulti(o, basis);
+    if ($('mres')) runMulti(o, basis, pr.tax);
 
     /* 매매 내역 */
     var tr = res.trades, show = tr.slice(-300).reverse();
@@ -1316,7 +1308,7 @@ if (typeof module !== 'undefined') module.exports = {
 
   /* ---------- 여러 종목 비교 ---------- */
   var MSEQ = 0, MULTI_HTML = '';
-  function runMulti(o, basis){
+  function runMulti(o, basis, tax){
     var seq = ++MSEQ, host = $('mres'), msg = $('mmsg');
     host.innerHTML = MULTI_HTML;
     if (!MULTI_HTML) msg.textContent = '계산 중...';
@@ -1329,7 +1321,8 @@ if (typeof module !== 'undefined') module.exports = {
         if (rows.length < 20){ bad.push((en.name || en.t) + ': 기간 데이터 부족'); return; }
         var c = entryCur(en), k = c === CUR ? 1 : (c === 'KRW' ? FX_NOTE : 1 / FX_NOTE);
         var oo = Object.assign({}, o, { amount: o.amount * k, budget: o.budget * k, reduceAmt: o.reduceAmt * k,
-          tiers: (o.tiers || []).map(function(t){ return { from: t.from, amount: t.amount * k }; }) });
+          tiers: (o.tiers || []).map(function(t){ return { from: t.from, amount: t.amount * k }; }),
+          taxPct: (c === 'USD' && tax.on) ? tax.rate : 0, taxDeduction: (c === 'USD' && tax.on) ? 2500 : 0 });
         var r = backtest(basisRows(rows, basis), oo);
         results.push({ en: en, c: c, r: r, from: rows[0].d, to: rows[rows.length - 1].d });
       }).catch(function(er){ bad.push((en.name || en.t) + ': ' + er.message); });
@@ -1390,21 +1383,21 @@ if (typeof module !== 'undefined') module.exports = {
     if (!LAST) return;
     var res = LAST.res, o = LAST.o, bg = getComputedStyle(document.body).backgroundColor, fg = getComputedStyle(document.body).color;
     var muted = getComputedStyle($('out')).getPropertyValue('--muted') || '#666';
-    Promise.all([svgToImage($('c1')), svgToImage($('c2'))]).then(function(ch){
+    Promise.all([svgToImage($('c1'))]).then(function(ch){
       var W = 1200, pad = 32, dpr = 2, kp = [
         ['순손익', money(res.totalPnl, true)], ['수익률 (최대 투입금 기준)', pct(res.retPct, true)], ['연환산 수익률', res.cagr == null ? '-' : pct(res.cagr, true)],
         ['손익 최대 낙폭', '-' + res.mddPct.toFixed(1) + '%'], ['매수 / 매도', res.nBuy + ' / ' + res.nSell + '회'], ['단순 보유 수익률', pct(res.bhPct, true)],
         ['최대 투입금', money(res.maxInvested)], ['최대 동시 보유', res.maxLotsHeld + '차수'], ['단순 보유 최대 낙폭', '-' + res.bhMddPct.toFixed(1) + '%']
       ];
-      var cw = W - pad * 2, c1h = cw * ch[0].h / ch[0].w, c2h = cw * ch[1].h / ch[1].w;
-      var kh = Math.ceil(kp.length / 3) * 46, H = pad + 90 + kh + 20 + c1h + 24 + c2h + 70;
+      var cw = W - pad * 2, c1h = cw * ch[0].h / ch[0].w;
+      var kh = Math.ceil(kp.length / 3) * 46, H = pad + 90 + kh + 20 + c1h + 70;
       var cv = document.createElement('canvas'); cv.width = W * dpr; cv.height = H * dpr;
       var cx = cv.getContext('2d'); cx.scale(dpr, dpr);
       cx.fillStyle = bg; cx.fillRect(0, 0, W, H);
       var f = 'system-ui,"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif', y = pad;
       cx.fillStyle = fg; cx.font = '700 22px ' + f; cx.fillText(($('ticker').value.trim() || '종목') + ' 분할매수 백테스트', pad, y + 22);
       cx.fillStyle = muted; cx.font = '13px ' + f;
-      cx.fillText(LAST.rows[0].d + ' ~ ' + LAST.rows[LAST.rows.length - 1].d + ' · 하락 -' + o.buyPct + '% 매수 / 상승 +' + o.sellPct + '% 매도 · 회당 ' + money(o.amount) + ' · 수수료 ' + o.feePct + '%' + (o.fill === 'open' ? ' · 다음날 시가 체결' : ' · 종가 체결') + ' · ' + (LAST.basis === 'raw' ? '원종가' : '수정종가'), pad, y + 46);
+      cx.fillText(LAST.rows[0].d + ' ~ ' + LAST.rows[LAST.rows.length - 1].d + ' · 하락 -' + o.buyPct + '% 매수 / 상승 +' + o.sellPct + '% 매도 · 회당 ' + money(o.amount) + ' · 수수료 ' + o.feePct + '%' + (o.fill === 'open' ? ' · 다음날 시가 체결' : ' · 종가 체결') + (o.taxPct > 0 ? ' · 세금 ' + o.taxPct + '% 반영' : '') + ' · ' + (LAST.basis === 'raw' ? '원종가' : '수정종가'), pad, y + 46);
       y += 70;
       kp.forEach(function(p, i){
         var col = i % 3, row = Math.floor(i / 3), x = pad + col * (cw / 3);
@@ -1412,8 +1405,7 @@ if (typeof module !== 'undefined') module.exports = {
         cx.fillStyle = fg; cx.font = '500 15px monospace'; cx.fillText(p[1], x, y + row * 46 + 36);
       });
       y += kh + 20;
-      cx.drawImage(ch[0].img, pad, y, cw, c1h); y += c1h + 24;
-      cx.drawImage(ch[1].img, pad, y, cw, c2h); y += c2h + 28;
+      cx.drawImage(ch[0].img, pad, y, cw, c1h); y += c1h + 28;
       cx.fillStyle = muted; cx.font = '11px ' + f;
       cx.fillText('과거 데이터 기반 시뮬레이션이며 세금·환율·슬리피지는 반영하지 않았습니다. 미래 수익을 보장하지 않습니다.', pad, y);
       cv.toBlob(function(b){ if (b) download(b, fileBase() + '_결과.png'); else $('err').textContent = '이미지를 만들지 못했습니다.'; }, 'image/png');
