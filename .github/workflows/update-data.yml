@@ -1,7 +1,6 @@
-
 name: update-data
 
-on: { workflow_dispatch: {}, schedule: [{ cron: "30 21 * * 1-5" }] }
+on: { workflow_dispatch: {}, schedule: [{ cron: "30 21 * * 1-5" }], push: { paths: ["tickers.txt"] } }
 
 permissions:
   contents: write
@@ -16,9 +15,23 @@ jobs:
           python-version: "3.12"
       - run: pip install yfinance pandas
       - run: python fetch_data.py
-      - name: Commit data
+      - name: 변경된 데이터 저장
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
           git add data
           git diff --cached --quiet || (git commit -m "update data" && git push)
+      - name: 텔레그램 알림 (실패했을 때만)
+        if: always()
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then echo "텔레그램 설정이 없어 알림을 건너뜁니다."; exit 0; fi
+          MSG=""
+          if [ "$JOB_STATUS" != "success" ]; then MSG="데이터 갱신 실패: 워크플로 오류 (Actions 탭 확인)"; fi
+          if [ -s failed.txt ]; then MSG="데이터 갱신 일부 실패: $(cat failed.txt)"; fi
+          if [ -n "$MSG" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" --data-urlencode "chat_id=${TG_CHAT}" --data-urlencode "text=${MSG}" > /dev/null
+          fi
