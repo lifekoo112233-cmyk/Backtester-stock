@@ -1449,7 +1449,10 @@ if (typeof module !== 'undefined') module.exports = {
     $(id).addEventListener('input', schedule);
     $(id).addEventListener('change', schedule);
   });
-  ['start', 'end'].forEach(function(id){ $(id).addEventListener('change', function(){ VIEW = null; }); });
+  ['start', 'end'].forEach(function(id){
+    $(id).addEventListener('input', schedule);
+    $(id).addEventListener('change', function(){ VIEW = null; schedule(); });
+  });
   ['amount', 'budget', 'redAmt'].forEach(function(id){ $(id).addEventListener('input', function(){ if (id === 'amount') amtTouched = true; fmtInput($(id)); }); });
   var rt = null;
   window.addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(function(){ drawCharts(); }, 150); });
