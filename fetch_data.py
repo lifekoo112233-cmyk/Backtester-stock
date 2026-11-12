@@ -8,6 +8,7 @@ import pathlib
 import re
 import sys
 import time
+from datetime import datetime, timezone
 
 import pandas as pd
 import yfinance as yf
@@ -69,12 +70,13 @@ def main():
             old = {e["t"]: e for e in json.loads(idx_path.read_text(encoding="utf-8"))}
         except Exception:
             old = {}
-    entries, ok = [], 0
+    entries, ok, failed = [], 0, []
     for t, name in read_tickers():
         print(f"{t} {name} 받는 중...")
         df = fetch(t)
         if df is None:
             print(f"  {t}: 실패했습니다. 이전 파일이 있으면 그대로 둡니다.")
+            failed.append(t)
             if t in old:
                 keep = dict(old[t])
                 if name:
@@ -89,6 +91,16 @@ def main():
         print(f"  {t}: {len(out)}행 ({out.index[0]} ~ {out.index[-1]})")
         time.sleep(1)
     idx_path.write_text(json.dumps(entries, ensure_ascii=False, indent=1), encoding="utf-8")
+    # 앱이 '최종 갱신 시각'과 실패 종목을 보여 줄 수 있도록 기록합니다. (UTC 기준)
+    status = {
+        "updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "total": ok + len(failed),
+        "ok": ok,
+        "failed": failed,
+    }
+    (OUT / "status.json").write_text(json.dumps(status, ensure_ascii=False, indent=1), encoding="utf-8")
+    # 워크플로가 알림을 보낼 때 읽는 파일 (저장소에는 올리지 않습니다)
+    (ROOT / "failed.txt").write_text(", ".join(failed), encoding="utf-8")
     if ok == 0:
         sys.exit(1)
 
