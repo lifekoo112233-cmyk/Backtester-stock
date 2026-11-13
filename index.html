@@ -237,11 +237,11 @@ table.mg td.mgc{cursor:pointer}
         <label class="check"><input type="checkbox" id="cfd"> CFD 모드 (매수 단위를 랏으로, 청산 여부 계산)</label>
         <div id="cfdBox" hidden style="display:flex;flex-direction:column;gap:10px">
           <div class="row">
-            <div class="field"><label for="cfdBal">계좌 잔고 ($)</label><input type="text" id="cfdBal" class="num" inputmode="decimal" autocomplete="off" placeholder="예: 5,000"></div>
-            <div class="field"><label for="cfdLev">레버리지 (배)</label><input type="number" id="cfdLev" min="1" step="any" inputmode="decimal" placeholder="예: 100"></div>
+            <div class="field"><label for="cfdBal">계좌 잔고 ($)</label><input type="text" id="cfdBal" class="num" value="100,000" inputmode="decimal" autocomplete="off" placeholder="예: 100,000"></div>
+            <div class="field"><label for="cfdLev">레버리지 (배)</label><input type="number" id="cfdLev" value="500" min="1" step="any" inputmode="decimal" placeholder="예: 500"></div>
           </div>
           <div class="row">
-            <div class="field"><label for="cfdSo">스톱아웃 (마진레벨 %)</label><input type="number" id="cfdSo" min="1" step="any" inputmode="decimal" placeholder="예: 50"></div>
+            <div class="field"><label for="cfdSo">스톱아웃 (마진레벨 %)</label><input type="number" id="cfdSo" value="50" min="1" step="any" inputmode="decimal" placeholder="예: 50"></div>
             <div class="field"><label for="cfdPv">1랏 · 1포인트당 ($)</label><input type="number" id="cfdPv" value="1" min="0.0001" step="any" inputmode="decimal"></div>
           </div>
           <label class="check"><input type="checkbox" id="cfdWd"> 수익금 출금 (잔고를 처음 금액으로 유지)</label>
@@ -1093,21 +1093,21 @@ if (typeof module !== 'undefined') module.exports = {
     $('sellRef').previousElementSibling.textContent = usd ? '수익금 기준' : '상승 기준';
   }
   function saveCfd(){
-    try { localStorage.setItem('sbt.cfd.v1', JSON.stringify({ cfd: isCfd(), bal: $('cfdBal').value, lev: $('cfdLev').value, so: $('cfdSo').value, pv: $('cfdPv').value, wd: $('cfdWd').checked, amount: isCfd() ? $('amount').value : '' })); } catch (e) {}
+    try { localStorage.setItem('sbt.cfd.v2', JSON.stringify({ cfd: isCfd(), bal: $('cfdBal').value, lev: $('cfdLev').value, so: $('cfdSo').value, pv: $('cfdPv').value, wd: $('cfdWd').checked, ml: isCfd() ? $('maxLots').value : '', amount: isCfd() ? $('amount').value : '' })); } catch (e) {}
   }
   function restoreCfd(){
     try {
-      var t = localStorage.getItem('sbt.cfd.v1'); if (!t) return;
+      var t = localStorage.getItem('sbt.cfd.v2'); if (!t) return;
       var c = JSON.parse(t);
-      $('cfdBal').value = c.bal || ''; $('cfdLev').value = c.lev || ''; $('cfdSo').value = c.so || ''; $('cfdPv').value = c.pv || '1'; $('cfdWd').checked = !!c.wd;
-      if (c.cfd){ $('cfd').checked = true; $('cur').value = 'USD'; CUR = 'USD'; if (c.amount) $('amount').value = c.amount; amtTouched = true; }
+      $('cfdBal').value = c.bal || '100,000'; $('cfdLev').value = c.lev || '500'; $('cfdSo').value = c.so || '50'; $('cfdPv').value = c.pv || '1'; $('cfdWd').checked = !!c.wd;
+      if (c.cfd){ $('cfd').checked = true; $('cur').value = 'USD'; CUR = 'USD'; if (c.amount) $('amount').value = c.amount; $('maxLots').value = c.ml || '50'; amtTouched = true; }
     } catch (e) {}
   }
   function toggleCfd(){
     var on = isCfd();
     if (on && CUR !== 'USD'){ $('cur').value = 'USD'; $('cur').dispatchEvent(new Event('change')); }
     TIERS = []; $('redFrom').value = '0'; $('redAmt').value = '0'; $('budget').value = '0';
-    if (on) setMoney($('amount'), 0.01); else setMoney($('amount'), DEFAULTS[CUR].amount);
+    if (on){ setMoney($('amount'), 1); $('maxLots').value = '50'; } else { setMoney($('amount'), DEFAULTS[CUR].amount); $('maxLots').value = '10'; }
     amtTouched = false;
     syncCfd(); buildChips(); buildRedChips(); renderTiers(); saveCfd(); render();
   }
@@ -1651,7 +1651,7 @@ if (typeof module !== 'undefined') module.exports = {
   }
 
   $('cur').addEventListener('change', function(){
-    if (isCfd() && $('cur').value === 'KRW'){ $('cfd').checked = false; syncCfd(); setMoney($('amount'), DEFAULTS.USD.amount); TIERS = []; $('redFrom').value = '0'; saveCfd(); }
+    if (isCfd() && $('cur').value === 'KRW'){ $('cfd').checked = false; syncCfd(); setMoney($('amount'), DEFAULTS.USD.amount); $('maxLots').value = '10'; TIERS = []; $('redFrom').value = '0'; saveCfd(); }
     var prev = CUR; CUR = $('cur').value;
     var curAmt = parseNum($('amount').value), ci = CHIPS[prev].indexOf(curAmt);
     if (curAmt === DEFAULTS[prev].amount) setMoney($('amount'), DEFAULTS[CUR].amount);
