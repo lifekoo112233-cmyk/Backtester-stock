@@ -238,6 +238,8 @@ table.mg td.mgc{cursor:pointer}
             <div class="field"><label for="cfdSo">스톱아웃 (마진레벨 %)</label><input type="number" id="cfdSo" min="1" step="any" inputmode="decimal" placeholder="예: 50"></div>
             <div class="field"><label for="cfdPv">1랏 · 1포인트당 ($)</label><input type="number" id="cfdPv" value="1" min="0.0001" step="any" inputmode="decimal"></div>
           </div>
+          <label class="check"><input type="checkbox" id="cfdWd"> 수익금 출금 (잔고를 처음 금액으로 유지)</label>
+          <p class="hint">끄면 실현이익이 잔고에 계속 쌓입니다. 켜면 손실은 잔고에서 빠지지만, 처음 잔고를 넘는 이익은 출금한 것으로 보고 순자산에서 뺍니다.</p>
           <p class="hint">잔고, 레버리지, 스톱아웃은 벤티지 계정 정보에서 확인해 직접 입력하세요. 매일 최저가로 마진레벨을 검사해 스톱아웃 이하가 되면 강제청산하고, 주문할 때 증거금이 모자라면 매수를 거절한 것으로 계산합니다. 세금은 반영하지 않습니다. 수수료 칸에는 스프레드를 비율(편도 %)로 넣으세요.</p>
         </div>
       </div>
@@ -456,6 +458,7 @@ function lotAmount(o, lotNo){
       fill:'close'|'open', perDay(하루 최대 매수 차수),
       stopPct(평단 대비 손절, 0=끔), cooldown(손절 후 쉬는 거래일), maxHoldDays(0=끔),
       partialPct(100=전량), secondSellPct(분할 매도 뒤 잔량 목표),
+      margin.withdraw(true면 실현이익을 출금해 순자산 기준 잔고를 처음 금액 이하로 유지),
       sellUsd(>0이면 상승률 대신 수익금($)으로 매도: avg=전체 평가손익 합계, lot=차수별 평가손익, 분할매도 미적용),
       acct, weightPct(계좌 총액 x 최대 비중 = 투입 한도)}
 */
@@ -472,7 +475,7 @@ function backtest(rows, o){
   var budget = o.budget || 0;
   var pv = o.pv > 0 ? o.pv : 0, lotStep = o.lotStep > 0 ? o.lotStep : 0.01;
   var mg = (o.margin && o.margin.balance > 0 && o.margin.leverage > 0 && o.margin.stopout > 0) ? o.margin : null;
-  var nLiq = 0, liqDates = [], nMarginBlocked = 0, minLevel = null, minLevelDate = null, maxUsed = 0, maxQty = 0;
+  var wd = 0, nLiq = 0, liqDates = [], nMarginBlocked = 0, minLevel = null, minLevelDate = null, maxUsed = 0, maxQty = 0;
   if (o.acct > 0 && o.weightPct > 0){
     var capAmt = o.acct * o.weightPct / 100;
     budget = budget ? Math.min(budget, capAmt) : capAmt;
@@ -555,6 +558,7 @@ function backtest(rows, o){
       if (!plan.single) rows_.push({ sh: shs, amt: shs * price, pnl: pnl, note: it.note });
     });
     if (!tot.sh) return false;
+    if (mg && mg.withdraw){ var balNow = mg.balance + realized - wd; if (balNow > mg.balance) wd += balNow - mg.balance; }   /* 처음 잔고를 넘는 실현이익은 출금 */
     lots = lots.filter(function(l){ return l.sh > 1e-12; });
     if (plan.single){
       nSell++;
@@ -584,7 +588,7 @@ function backtest(rows, o){
       if (mg && qty > 0){
         var sh0 = 0, mv0 = 0;
         for (var qi = 0; qi < lots.length; qi++){ sh0 += lots[qi].sh; mv0 += lots[qi].sh * price; }
-        marginOK = (mg.balance + realized + mv0 - invested - qty * price * fee) - (sh0 + qty) * price / mg.leverage >= 0;
+        marginOK = (mg.balance + realized - wd + mv0 - invested - qty * price * fee) - (sh0 + qty) * price / mg.leverage >= 0;
         if (capOK && budgetOK && !marginOK) nMarginBlocked++;
       }
       if (capOK && budgetOK && marginOK && qty > 0){
@@ -617,10 +621,10 @@ function backtest(rows, o){
       var lowP = rows[i].l != null ? Math.min(rows[i].l, c) : c, Qs = 0, mvL = 0;
       for (k = 0; k < lots.length; k++){ Qs += lots[k].sh; mvL += lots[k].sh * lowP; }
       var usedL = Qs * lowP / mg.leverage;
-      mlv = usedL > 0 ? (mg.balance + realized + mvL - invested) / usedL * 100 : null;
+      mlv = usedL > 0 ? (mg.balance + realized - wd + mvL - invested) / usedL * 100 : null;
       if (mlv != null && (minLevel == null || mlv < minLevel)){ minLevel = mlv; minLevelDate = d; }
       if (mlv != null && mlv <= mg.stopout){
-        var sF = mg.stopout / 100, pStar = (invested - mg.balance - realized) / (Qs * (1 - sF / mg.leverage));
+        var sF = mg.stopout / 100, pStar = (invested - mg.balance - realized + wd) / (Qs * (1 - sF / mg.leverage));
         var pf = (rows[i].o != null && rows[i].o < pStar) ? rows[i].o : pStar;   /* 시가가 이미 더 낮으면 시가에 청산 */
         if (!(pf > 0)) pf = lowP;
         var allItems = lots.map(function(l){ return { lot: l, frac: 1 }; });
@@ -704,7 +708,7 @@ function backtest(rows, o){
     mdd: mdd, mddPct: mdd / base * 100, minPnl: minPnl, minPnlPct: minPnl / base * 100,
     bhPnl: bh[bh.length - 1], bhPct: (bhRatio - 1) * 100, bhCagr: bhCagr,
     eqMddPct: ddPct(eqS), bhMddPct: ddPct(eqB), eqEnd: eqS[n - 1], bhEnd: eqB[n - 1],
-    maxQty: maxQty, margin: mg ? { balance: mg.balance, leverage: mg.leverage, stopout: mg.stopout, minLevel: minLevel, minLevelDate: minLevelDate, nLiq: nLiq, liqDates: liqDates, nMarginBlocked: nMarginBlocked, maxUsed: maxUsed } : null,
+    maxQty: maxQty, margin: mg ? { withdrawn: wd, withdraw: !!mg.withdraw, balance: mg.balance, leverage: mg.leverage, stopout: mg.stopout, minLevel: minLevel, minLevelDate: minLevelDate, nLiq: nLiq, liqDates: liqDates, nMarginBlocked: nMarginBlocked, maxUsed: maxUsed } : null,
     nBuy: nBuy, nSell: nSell, nStop: nStop, nTime: nTime, blockedDays: blockedDays, maxLotsHeld: maxLotsHeld,
     openLots: lots.length, openAvg: openSh ? openVal / openSh : null, openInvested: invested,
     cycles: summarizeCycles(curve, trades, rows)
@@ -989,7 +993,7 @@ if (typeof module !== 'undefined') module.exports = {
   }
 
   /* ---------- 설정 읽기 / 저장용 스냅샷 ---------- */
-  var FIELDS = ['cfd','cfdBal','cfdLev','cfdSo','cfdPv','buyPct','sellPct','sellMode','sellUsd','buyRef','sellRef','amount','maxLots','budget','fee','tax','taxPct','frac','fill','perDay','basis','stop','cool','hold','part','second','redFrom','redAmt'];
+  var FIELDS = ['cfd','cfdBal','cfdLev','cfdSo','cfdPv','cfdWd','buyPct','sellPct','sellMode','sellUsd','buyRef','sellRef','amount','maxLots','budget','fee','tax','taxPct','frac','fill','perDay','basis','stop','cool','hold','part','second','redFrom','redAmt'];
   var TIERS = []; /* [{from, amt}] 문자열 */
   function getVals(){
     var v = { cur: CUR };
@@ -1039,7 +1043,7 @@ if (typeof module !== 'undefined') module.exports = {
       var bal = parseNum(v.cfdBal), lev = parseFloat(v.cfdLev), so = parseFloat(v.cfdSo);
       if (bal > 0 && lev >= 1 && so > 0){
         if (so >= 100 * lev) return { error: '스톱아웃 값이 레버리지에 비해 너무 큽니다.' };
-        o.margin = { balance: bal, leverage: lev, stopout: so }; o.baseCapital = bal; cfdReady = true;
+        o.margin = { balance: bal, leverage: lev, stopout: so, withdraw: !!v.cfdWd }; o.baseCapital = bal; cfdReady = true;
       }
     }
     if (cfd && v.sellMode === 'usd' && !(o.sellUsd > 0)) return { error: '목표 수익금($)을 0보다 크게 입력해 주세요.' };
@@ -1078,13 +1082,13 @@ if (typeof module !== 'undefined') module.exports = {
     $('sellRef').previousElementSibling.textContent = usd ? '수익금 기준' : '상승 기준';
   }
   function saveCfd(){
-    try { localStorage.setItem('sbt.cfd.v1', JSON.stringify({ cfd: isCfd(), bal: $('cfdBal').value, lev: $('cfdLev').value, so: $('cfdSo').value, pv: $('cfdPv').value, amount: isCfd() ? $('amount').value : '' })); } catch (e) {}
+    try { localStorage.setItem('sbt.cfd.v1', JSON.stringify({ cfd: isCfd(), bal: $('cfdBal').value, lev: $('cfdLev').value, so: $('cfdSo').value, pv: $('cfdPv').value, wd: $('cfdWd').checked, amount: isCfd() ? $('amount').value : '' })); } catch (e) {}
   }
   function restoreCfd(){
     try {
       var t = localStorage.getItem('sbt.cfd.v1'); if (!t) return;
       var c = JSON.parse(t);
-      $('cfdBal').value = c.bal || ''; $('cfdLev').value = c.lev || ''; $('cfdSo').value = c.so || ''; $('cfdPv').value = c.pv || '1';
+      $('cfdBal').value = c.bal || ''; $('cfdLev').value = c.lev || ''; $('cfdSo').value = c.so || ''; $('cfdPv').value = c.pv || '1'; $('cfdWd').checked = !!c.wd;
       if (c.cfd){ $('cfd').checked = true; $('cur').value = 'USD'; CUR = 'USD'; if (c.amount) $('amount').value = c.amount; amtTouched = true; }
     } catch (e) {}
   }
@@ -1343,7 +1347,8 @@ if (typeof module !== 'undefined') module.exports = {
         h += '<div class="box" id="mgBox">최저 마진레벨 <b>' + (mgn.minLevel == null ? '-' : Math.round(mgn.minLevel).toLocaleString('ko-KR') + '%') + '</b> (' + (mgn.minLevelDate || '-') + ', 그날 최저가 기준) · 스톱아웃 ' + mgn.stopout + '%<br>' +
           (mgn.nLiq ? '<b class="up">강제청산 ' + mgn.nLiq + '번</b> (' + mgn.liqDates.slice(0, 6).join(', ') + (mgn.liqDates.length > 6 ? ' …' : '') + ')' : '<b>강제청산 없음</b>') +
           (mgn.nMarginBlocked ? ' · 증거금이 모자라 매수가 거절된 횟수 <b>' + mgn.nMarginBlocked + '</b>' : '') + '<br>' +
-          '가장 많이 쌓았을 때 총 <b>' + (Math.round(totLot * 100) / 100) + '랏</b> · 최대 사용 증거금 <b>' + money(mgn.maxUsed) + '</b> (잔고의 ' + (mgn.maxUsed / mgn.balance * 100).toFixed(0) + '%)</div>' +
+          '가장 많이 쌓았을 때 총 <b>' + (Math.round(totLot * 100) / 100) + '랏</b> · 최대 사용 증거금 <b>' + money(mgn.maxUsed) + '</b> (잔고의 ' + (mgn.maxUsed / mgn.balance * 100).toFixed(0) + '%)' +
+          (mgn.withdraw ? '<br>수익금 출금 켬: 누적 출금액 <b>' + money(mgn.withdrawn) + '</b> (순손익에는 포함, 잔고는 ' + money(mgn.balance) + ' 이하로 유지)' : '') + '</div>' +
           '<div class="legend" style="margin-top:10px"><span><i style="border-color:var(--accent)"></i>마진레벨 (그날 최저가 기준)</span><span><i style="border-color:var(--muted);border-top-style:dashed"></i>스톱아웃</span></div>' +
           '<div class="readout" id="ro2"></div><div class="chart" id="c2"></div>' +
           '<h3 style="margin-top:16px;font-size:14px">회당 랏 × 최대 차수별 청산 여부</h3><p class="hint">같은 기간·같은 조건에서 회당 랏 수와 최대 차수만 바꿔 본 <b>최저 마진레벨</b>입니다. 초록은 스톱아웃의 1.5배 이상 유지, 노랑은 아슬아슬하거나 증거금 부족으로 주문이 거절됨, 빨강은 강제청산입니다. 칸을 누르면 그 값이 적용됩니다.</p>' +
@@ -1658,7 +1663,7 @@ if (typeof module !== 'undefined') module.exports = {
   });
   $('cfd').addEventListener('change', toggleCfd);
   $('sellMode').addEventListener('change', syncSell);
-  ['cfd', 'cfdBal', 'cfdLev', 'cfdSo', 'cfdPv'].forEach(function(id){ $(id).addEventListener('input', saveCfd); $(id).addEventListener('change', saveCfd); });
+  ['cfd', 'cfdBal', 'cfdLev', 'cfdSo', 'cfdPv', 'cfdWd'].forEach(function(id){ $(id).addEventListener('input', saveCfd); $(id).addEventListener('change', saveCfd); });
   $('cfdBal').addEventListener('input', function(){ fmtInput($('cfdBal')); });
   ['amount', 'budget', 'redAmt'].forEach(function(id){ $(id).addEventListener('input', function(){ if (id === 'amount') amtTouched = true; fmtInput($(id)); }); });
   var rt = null;
