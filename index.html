@@ -868,7 +868,7 @@ if (typeof module !== 'undefined') module.exports = {
   /* 금액 입력칸: 천 단위 쉼표 */
   function parseNum(s){ var v = parseFloat(String(s).replace(/,/g, '')); return isFinite(v) ? v : NaN; }
   function setMoney(el, n){ el.value = n.toLocaleString('en-US', { maximumFractionDigits: 6 }); }
-  var CHIPS = { KRW: [500000, 3000000, 5000000], USD: [500, 1000, 5000], LOT: [0.01, 0.05, 0.1] };
+  var CHIPS = { KRW: [500000, 3000000, 5000000], USD: [500, 1000, 5000], LOT: [0.1, 0.5, 1, 2] };
   function isCfd(){ return $('cfd').checked; }
   function chipKey(){ return isCfd() ? 'LOT' : CUR; }
   function chipLabel(v){ return isCfd() ? v + '랏' : (CUR === 'USD' ? '$' + v.toLocaleString('en-US') : (v / 10000).toLocaleString('ko-KR') + '만원'); }
@@ -920,7 +920,7 @@ if (typeof module !== 'undefined') module.exports = {
   function buildRedChips(){ addChips($('redChips'), $('redAmt'), render); }
   function buildDateChips(){
     var host = $('dateChips');
-    host.innerHTML = '<span class="lab">시작일 바로가기</span>' + [2000, 2010, 2020].map(function(y){
+    host.innerHTML = '<span class="lab">시작일 바로가기</span>' + [2000, 2010, 2020, 2025].map(function(y){
       return '<button type="button" class="chip" data-y="' + y + '">' + y + '년부터</button>';
     }).join('') + '<button type="button" class="chip" data-y="all">전체 기간</button>';
     host.querySelectorAll('.chip').forEach(function(b){
