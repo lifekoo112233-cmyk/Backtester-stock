@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="백테스터">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap"></noscript>
 <style>
 /* Layout: 왼쪽 조건 패널(고정폭) + 오른쪽 결과. 폰에서는 한 열로 쌓임 */
 :root{
@@ -119,6 +120,8 @@ td.mono{font-family:var(--mono);font-size:12px}
 table.cmp{width:100%}
 table.cmp th{position:static}
 table.cmp tr.cur td{background:var(--chip)}
+table.cmp.multi th,table.cmp.multi td{padding:6px 7px}
+table.cmp.multi td.l,table.cmp.multi th.l{max-width:7.5em;overflow:hidden;text-overflow:ellipsis}
 .log{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 .tag{display:inline-block;padding:0 7px;border-radius:99px;font-size:11.5px;font-weight:500;background:var(--chip)}
 .tag.b{color:var(--up)} .tag.s{color:var(--down)}
@@ -128,6 +131,12 @@ table.cmp tr.cur td{background:var(--chip)}
 .hm td.cell.neg{--hue:var(--down)}
 .hm td.cell.cur{outline:2px solid var(--fg);outline-offset:-2px}
 .hm td.cell.best{font-weight:700;box-shadow:inset 0 0 0 2px var(--accent)}
+.mgc{font-family:var(--mono);text-align:center;min-width:64px;font-size:12px}
+.mgc.okc{background:color-mix(in srgb,var(--accent) 22%,var(--surface))}
+.mgc.warnc{background:color-mix(in srgb,#d9a21b 38%,var(--surface))}
+.mgc.badc{background:color-mix(in srgb,#c0392b 38%,var(--surface))}
+.mgc.cur{outline:2px solid var(--fg);outline-offset:-2px}
+table.mg td.mgc{cursor:pointer}
 .tier{display:flex;flex-direction:column;gap:6px;padding:8px 0;border-top:1px dashed var(--line)}
 .trow{display:grid;grid-template-columns:64px auto 1fr auto;gap:6px;align-items:center}
 .trow .lab{white-space:nowrap}
@@ -180,7 +189,7 @@ table.cmp tr.cur td{background:var(--chip)}
         <h2>매수 조건</h2>
         <div class="row">
           <div class="field"><label for="buyPct">하락률 (%)</label><input type="number" id="buyPct" value="5" min="0.1" max="90" step="any" inputmode="decimal"></div>
-          <div class="field"><label for="amount">회당 매수 금액</label><input type="text" id="amount" class="num" value="1,000,000" inputmode="decimal" autocomplete="off"></div>
+          <div class="field"><label for="amount" id="amountLab">회당 매수 금액</label><input type="text" id="amount" class="num" value="1,000,000" inputmode="decimal" autocomplete="off"></div>
         </div>
         <div class="chips" id="amtChips" role="group" aria-label="회당 매수 금액 빠른 선택"></div>
         <div class="field"><label for="buyRef">하락 기준</label>
@@ -208,6 +217,22 @@ table.cmp tr.cur td{background:var(--chip)}
             <option value="avg">평단 대비 (전량 매도)</option>
             <option value="lot">차수별 매수가 대비 (해당 차수만 매도)</option>
           </select></div>
+      </div>
+
+      <div class="group">
+        <h2>벤티지 CFD (랏 · 증거금)</h2>
+        <label class="check"><input type="checkbox" id="cfd"> CFD 모드 (매수 단위를 랏으로, 청산 여부 계산)</label>
+        <div id="cfdBox" hidden style="display:flex;flex-direction:column;gap:10px">
+          <div class="row">
+            <div class="field"><label for="cfdBal">계좌 잔고 ($)</label><input type="text" id="cfdBal" class="num" inputmode="decimal" autocomplete="off" placeholder="예: 5,000"></div>
+            <div class="field"><label for="cfdLev">레버리지 (배)</label><input type="number" id="cfdLev" min="1" step="any" inputmode="decimal" placeholder="예: 100"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="cfdSo">스톱아웃 (마진레벨 %)</label><input type="number" id="cfdSo" min="1" step="any" inputmode="decimal" placeholder="예: 50"></div>
+            <div class="field"><label for="cfdPv">1랏 · 1포인트당 ($)</label><input type="number" id="cfdPv" value="1" min="0.0001" step="any" inputmode="decimal"></div>
+          </div>
+          <p class="hint">잔고, 레버리지, 스톱아웃은 벤티지 계정 정보에서 확인해 직접 입력하세요. 매일 최저가로 마진레벨을 검사해 스톱아웃 이하가 되면 강제청산하고, 주문할 때 증거금이 모자라면 매수를 거절한 것으로 계산합니다. 세금은 반영하지 않습니다. 수수료 칸에는 스프레드를 비율(편도 %)로 넣으세요.</p>
+        </div>
       </div>
 
       <div class="group">
@@ -262,6 +287,11 @@ table.cmp tr.cur td{background:var(--chip)}
 </div>
 
 <script>
+/* 화면 오류가 나면 조용히 멈추지 않고 메시지를 보여 줌 */
+window.addEventListener('error', function(e){
+  var el = document.getElementById('err');
+  if (el) el.textContent = '화면 오류: ' + (e.message || '알 수 없음') + ' (줄 ' + (e.lineno || '?') + ')';
+});
 /* ===== 백테스트 엔진 (순수 함수) ===== */
 function pad2(x){ x = String(x); return x.length < 2 ? '0' + x : x; }
 function isoDate(d){ return d.toISOString().slice(0, 10); }
@@ -337,7 +367,7 @@ function parseCSV(text){
   });
   var first = splitLine(lines[0], best);
   var hasHeader = !first.some(function(x){ return normDate(x); });
-  var dateCol = 0, closeCol = -1, adjCol = -1, openCol = -1, colName = '';
+  var dateCol = 0, closeCol = -1, adjCol = -1, openCol = -1, lowCol = -1, colName = '';
   if (hasHeader){
     var head = first.map(function(s){ return s.toLowerCase(); });
     var di = head.findIndex(function(h){ return /date|날짜|일자|일시|time/.test(h); });
@@ -348,11 +378,12 @@ function parseCSV(text){
     if (ai >= 0){ adjCol = ai; closeCol = ci >= 0 ? ci : ai; colName = first[ai]; }
     else if (ci >= 0){ closeCol = ci; colName = first[ci]; }
     openCol = oi;
+    lowCol = head.findIndex(function(h){ return /^low|저가/.test(h) && !/adj|수정/.test(h); });
   }
   if (closeCol < 0){
     closeCol = first.length >= 5 ? 4 : 1;
     colName = hasHeader ? (first[closeCol] || '') : (closeCol + 1) + '번째 열';
-    if (!hasHeader && first.length >= 5) openCol = 1;
+    if (!hasHeader && first.length >= 5){ openCol = 1; lowCol = 3; }
   }
   var rows = [];
   for (var i = hasHeader ? 1 : 0; i < lines.length; i++){
@@ -361,8 +392,8 @@ function parseCSV(text){
     var a = toNum(cells[adjCol >= 0 ? adjCol : closeCol]);
     var r = adjCol >= 0 ? toNum(cells[closeCol]) : a;
     if (!isFinite(r) || r <= 0) r = a;
-    var op = openCol >= 0 ? toNum(cells[openCol]) : NaN;
-    if (d && isFinite(a) && a > 0) rows.push({ d: d, c: a, a: a, r: r, o: (isFinite(op) && op > 0) ? op : null });
+    var op = openCol >= 0 ? toNum(cells[openCol]) : NaN, lw = lowCol >= 0 ? toNum(cells[lowCol]) : NaN;
+    if (d && isFinite(a) && a > 0) rows.push({ d: d, c: a, a: a, r: r, o: (isFinite(op) && op > 0) ? op : null, lw: (isFinite(lw) && lw > 0) ? lw : null });
   }
   rows.sort(function(x, y){ return x.d < y.d ? -1 : x.d > y.d ? 1 : 0; });
   var dedup = [];
@@ -379,7 +410,7 @@ function basisRows(rows, basis){
   return rows.map(function(x){
     var a = x.a != null ? x.a : x.c, r = x.r != null ? x.r : x.c;
     var o = x.o == null ? null : (raw ? x.o : x.o * a / r);
-    return { d: x.d, c: raw ? r : a, o: o };
+    return { d: x.d, c: raw ? r : a, o: o, l: x.lw == null ? null : (raw ? x.lw : x.lw * a / r) };
   });
 }
 
@@ -430,6 +461,9 @@ function backtest(rows, o){
   var partPct = (o.partialPct > 0 && o.partialPct < 100) ? o.partialPct : 100;
   var second = o.secondSellPct > 0 ? o.secondSellPct : o.sellPct * 2;
   var budget = o.budget || 0;
+  var pv = o.pv > 0 ? o.pv : 0, lotStep = o.lotStep > 0 ? o.lotStep : 0.01;
+  var mg = (o.margin && o.margin.balance > 0 && o.margin.leverage > 0 && o.margin.stopout > 0) ? o.margin : null;
+  var nLiq = 0, liqDates = [], nMarginBlocked = 0, minLevel = null, minLevelDate = null, maxUsed = 0, maxQty = 0;
   if (o.acct > 0 && o.weightPct > 0){
     var capAmt = o.acct * o.weightPct / 100;
     budget = budget ? Math.min(budget, capAmt) : capAmt;
@@ -525,10 +559,18 @@ function backtest(rows, o){
     var d = rows[idx].d, blocked = false;
     for (var j = 0; j < k; j++){
       var lotAmt = lotAmount(o, lots.length + 1);
-      var qty = o.fractional ? lotAmt / price : Math.floor(lotAmt / price);
+      var qty = pv ? Math.floor(lotAmt / lotStep + 1e-9) * lotStep * pv : (o.fractional ? lotAmt / price : Math.floor(lotAmt / price));
+      var need = pv ? qty * price * (1 + fee) : lotAmt * (1 + fee);
       var capOK = lots.length < o.maxLots;
-      var budgetOK = !budget || invested + lotAmt * (1 + fee) <= budget + EPS;
-      if (capOK && budgetOK && qty > 0){
+      var budgetOK = !budget || invested + need <= budget + EPS;
+      var marginOK = true;
+      if (mg && qty > 0){
+        var sh0 = 0, mv0 = 0;
+        for (var qi = 0; qi < lots.length; qi++){ sh0 += lots[qi].sh; mv0 += lots[qi].sh * price; }
+        marginOK = (mg.balance + realized + mv0 - invested - qty * price * fee) - (sh0 + qty) * price / mg.leverage >= 0;
+        if (capOK && budgetOK && !marginOK) nMarginBlocked++;
+      }
+      if (capOK && budgetOK && marginOK && qty > 0){
         var bc = qty * price * (1 + fee);
         if (!lots.length) cycleStart = d;
         lots.push({ sh: qty, p: price, cost: bc, n: lots.length + 1, part: false });
@@ -536,6 +578,8 @@ function backtest(rows, o){
         invested += bc; nBuy++; peak = price;
         if (invested > maxInvested) maxInvested = invested;
         if (lots.length > maxLotsHeld) maxLotsHeld = lots.length;
+        var totQ = 0; for (var qj = 0; qj < lots.length; qj++) totQ += lots[qj].sh;
+        if (totQ > maxQty) maxQty = totQ;
         trades.push({ i: idx, d: d, side: 'B', p: price, sh: qty, amt: qty * price, pnl: null, note: lots.length + '차수' });
       } else { blocked = true; break; }
     }
@@ -548,6 +592,23 @@ function backtest(rows, o){
     if (pending){                                   /* 전날 신호를 오늘 시가에 체결 */
       if (pending.type === 'S') execSells(pending.plan, i, ox); else doBuy(i, ox, pending.k);
       pending = null;
+    }
+
+    /* CFD 증거금: 그날의 최저가로 마진레벨을 확인하고, 스톱아웃 이하면 강제청산 */
+    var mlv = null;
+    if (mg && lots.length){
+      var lowP = rows[i].l != null ? Math.min(rows[i].l, c) : c, Qs = 0, mvL = 0;
+      for (k = 0; k < lots.length; k++){ Qs += lots[k].sh; mvL += lots[k].sh * lowP; }
+      var usedL = Qs * lowP / mg.leverage;
+      mlv = usedL > 0 ? (mg.balance + realized + mvL - invested) / usedL * 100 : null;
+      if (mlv != null && (minLevel == null || mlv < minLevel)){ minLevel = mlv; minLevelDate = d; }
+      if (mlv != null && mlv <= mg.stopout){
+        var sF = mg.stopout / 100, pStar = (invested - mg.balance - realized) / (Qs * (1 - sF / mg.leverage));
+        var pf = (rows[i].o != null && rows[i].o < pStar) ? rows[i].o : pStar;   /* 시가가 이미 더 낮으면 시가에 청산 */
+        if (!(pf > 0)) pf = lowP;
+        var allItems = lots.map(function(l){ return { lot: l, frac: 1 }; });
+        if (execSells({ reason: 'liq', single: true, items: allItems, note: allItems.length + '차수 강제청산 (마진레벨 ' + mlv.toFixed(0) + '%)' }, i, pf)){ nLiq++; liqDates.push(d); sold = true; }
+      }
     }
 
     var plan = planSells(c, d);
@@ -581,17 +642,18 @@ function backtest(rows, o){
       }
     }
 
-    var mv = 0;
-    for (k = 0; k < lots.length; k++) mv += lots[k].sh * c;
+    var mv = 0, qS = 0;
+    for (k = 0; k < lots.length; k++){ mv += lots[k].sh * c; qS += lots[k].sh; }
+    if (mg){ var uC = qS * c / mg.leverage; if (uC > maxUsed) maxUsed = uC; }
     /* 세금: 그 해 마지막 거래일에 (연간 실현손익 - 공제) x 세율을 낸 것으로 계산 (손실은 같은 해 안에서만 상계) */
     if (taxRate > 0 && (i === n - 1 || rows[i + 1].d.slice(0, 4) !== d.slice(0, 4))){
       taxPaid += Math.max(0, yearGain - taxDed) * taxRate; yearGain = 0;
     }
-    curve.push({ d: d, c: c, pnl: realized - taxPaid + (mv - invested), inv: invested, n: lots.length });
+    curve.push({ d: d, c: c, pnl: realized - taxPaid + (mv - invested), inv: invested, n: lots.length, ml: mlv });
   }
 
   var last = curve[n - 1];
-  var base = maxInvested > 0 ? maxInvested : 1;
+  var base = o.baseCapital > 0 ? o.baseCapital : (maxInvested > 0 ? maxInvested : 1);
   var bh = curve.map(function(r){ return base * (r.c / rows[0].c - 1); });
 
   var peakPnl = -Infinity, mdd = 0, minPnl = 0;
@@ -625,6 +687,7 @@ function backtest(rows, o){
     mdd: mdd, mddPct: mdd / base * 100, minPnl: minPnl, minPnlPct: minPnl / base * 100,
     bhPnl: bh[bh.length - 1], bhPct: (bhRatio - 1) * 100, bhCagr: bhCagr,
     eqMddPct: ddPct(eqS), bhMddPct: ddPct(eqB), eqEnd: eqS[n - 1], bhEnd: eqB[n - 1],
+    maxQty: maxQty, margin: mg ? { balance: mg.balance, leverage: mg.leverage, stopout: mg.stopout, minLevel: minLevel, minLevelDate: minLevelDate, nLiq: nLiq, liqDates: liqDates, nMarginBlocked: nMarginBlocked, maxUsed: maxUsed } : null,
     nBuy: nBuy, nSell: nSell, nStop: nStop, nTime: nTime, blockedDays: blockedDays, maxLotsHeld: maxLotsHeld,
     openLots: lots.length, openAvg: openSh ? openVal / openSh : null, openInvested: invested,
     cycles: summarizeCycles(curve, trades, rows)
@@ -752,6 +815,7 @@ if (typeof module !== 'undefined') module.exports = {
     blocked: '하락 조건은 맞았지만 최대 차수·총 투자 한도에 걸려 사지 못한 날 수입니다.',
     open: '마지막 날 아직 팔지 않고 들고 있는 차수와 평단입니다.',
     tax: '해외주식 양도소득세 추정액의 합계입니다. 순손익과 낙폭, 수익률은 이 세금을 뺀 값입니다. 실현 손익은 세금을 빼기 전 금액입니다.',
+    margin: '매일 그날의 최저가를 기준으로 (순자산 ÷ 사용 증거금)을 계산한 마진레벨입니다. 스톱아웃 이하로 내려가면 강제청산됩니다. 일봉 기준이라 갭이나 장중 스프레드 확대는 반영하지 못하니 여유를 두고 보세요.',
     stops: '손절 조건이나 최대 보유 기간에 걸려 청산한 횟수입니다.',
     cycle: '보유가 0에서 시작해 다시 0이 될 때까지를 한 사이클로 봅니다. 1차수에서 끝난 사이클은 처음 산 뒤 추가 매수 없이 바로 목표에 도달한 경우입니다.',
     cmp: '최대 투입금을 계좌로 놓고 비교합니다. 전략은 필요할 때만 투입하고 나머지는 현금(이자 0)으로 두며, 단순 보유는 첫날 전액을 사서 끝까지 듭니다. 낙폭은 계좌 평가액 기준입니다.',
@@ -804,11 +868,14 @@ if (typeof module !== 'undefined') module.exports = {
   /* 금액 입력칸: 천 단위 쉼표 */
   function parseNum(s){ var v = parseFloat(String(s).replace(/,/g, '')); return isFinite(v) ? v : NaN; }
   function setMoney(el, n){ el.value = n.toLocaleString('en-US', { maximumFractionDigits: 6 }); }
-  var CHIPS = { KRW: [500000, 3000000, 5000000], USD: [500, 1000, 5000] };
-  function chipLabel(v){ return CUR === 'USD' ? '$' + v.toLocaleString('en-US') : (v / 10000).toLocaleString('ko-KR') + '만원'; }
+  var CHIPS = { KRW: [500000, 3000000, 5000000], USD: [500, 1000, 5000], LOT: [0.01, 0.05, 0.1] };
+  function isCfd(){ return $('cfd').checked; }
+  function chipKey(){ return isCfd() ? 'LOT' : CUR; }
+  function chipLabel(v){ return isCfd() ? v + '랏' : (CUR === 'USD' ? '$' + v.toLocaleString('en-US') : (v / 10000).toLocaleString('ko-KR') + '만원'); }
+  function fmtAmt(n){ return isCfd() ? (Math.round(n * 100) / 100) + '랏' : money(n); }
   function buildChips(){
     var host = $('amtChips');
-    host.innerHTML = '<span class="lab">회당 금액 더하기</span>' + CHIPS[CUR].map(function(v){
+    host.innerHTML = '<span class="lab">' + (isCfd() ? '회당 랏 더하기' : '회당 금액 더하기') + '</span>' + CHIPS[chipKey()].map(function(v){
       return '<button type="button" class="chip" data-v="' + v + '">+' + chipLabel(v) + '</button>';
     }).join('') + '<button type="button" class="chip" id="amtClear">지우기</button>';
     host.querySelectorAll('.chip[data-v]').forEach(function(b){
@@ -822,7 +889,7 @@ if (typeof module !== 'undefined') module.exports = {
     $('amtClear').addEventListener('click', function(){ $('amount').value = ''; amtTouched = true; $('amount').focus(); render(); });
   }
   function addChips(host, input, after){
-    host.innerHTML = '<span class="lab">금액 더하기</span>' + CHIPS[CUR].map(function(v){
+    host.innerHTML = '<span class="lab">' + (isCfd() ? '랏 더하기' : '금액 더하기') + '</span>' + CHIPS[chipKey()].map(function(v){
       return '<button type="button" class="chip" data-v="' + v + '">+' + chipLabel(v) + '</button>';
     }).join('') + '<button type="button" class="chip" data-clear="1">지우기</button>';
     host.querySelectorAll('[data-v]').forEach(function(b){
@@ -905,7 +972,7 @@ if (typeof module !== 'undefined') module.exports = {
   }
 
   /* ---------- 설정 읽기 / 저장용 스냅샷 ---------- */
-  var FIELDS = ['buyPct','sellPct','buyRef','sellRef','amount','maxLots','budget','fee','tax','taxPct','frac','fill','perDay','basis','stop','cool','hold','part','second','redFrom','redAmt'];
+  var FIELDS = ['cfd','cfdBal','cfdLev','cfdSo','cfdPv','buyPct','sellPct','buyRef','sellRef','amount','maxLots','budget','fee','tax','taxPct','frac','fill','perDay','basis','stop','cool','hold','part','second','redFrom','redAmt'];
   var TIERS = []; /* [{from, amt}] 문자열 */
   function getVals(){
     var v = { cur: CUR };
@@ -921,14 +988,15 @@ if (typeof module !== 'undefined') module.exports = {
       if (el.type === 'checkbox') el.checked = !!v[id]; else el.value = v[id];
     });
     TIERS = (v.tiers || []).map(function(t){ return { from: t.from, amt: t.amt }; });
+    syncCfd(); buildChips(); buildRedChips();
     renderTiers();
     if (v.stop > 0 || v.part < 100 || v.hold > 0 || v.redFrom > 0) $('adv').open = true;
   }
   /* 값 묶음 → 엔진 옵션. cur 가 다르면 금액류를 환산 */
   function paramsFrom(v, toCur){
-    var k = 1;
-    if (toCur && v.cur && v.cur !== toCur) k = toCur === 'KRW' ? FX_NOTE : 1 / FX_NOTE;
-    var stockCur = toCur || v.cur || CUR, taxRate = parseFloat(v.taxPct) || 0;
+    var k = 1, cfd = !!v.cfd;
+    if (!cfd && toCur && v.cur && v.cur !== toCur) k = toCur === 'KRW' ? FX_NOTE : 1 / FX_NOTE;
+    var stockCur = cfd ? 'USD' : (toCur || v.cur || CUR), taxRate = parseFloat(v.taxPct) || 0;
     var tiers = [];
     (v.tiers || []).forEach(function(t){
       var f = parseInt(t.from, 10), a = parseNum(t.amt);
@@ -943,8 +1011,19 @@ if (typeof module !== 'undefined') module.exports = {
       stopPct: parseFloat(v.stop) || 0, cooldown: parseInt(v.cool, 10) || 0, maxHoldDays: parseInt(v.hold, 10) || 0,
       partialPct: parseFloat(v.part) || 100, secondSellPct: parseFloat(v.second) || 0,
       reduceFrom: parseInt(v.redFrom, 10) || 0, reduceAmt: (parseNum(v.redAmt) || 0) * k,
-      taxPct: (v.tax && stockCur === 'USD') ? taxRate : 0, taxDeduction: (v.tax && stockCur === 'USD') ? 2500 : 0
+      taxPct: (v.tax && stockCur === 'USD' && !cfd) ? taxRate : 0, taxDeduction: (v.tax && stockCur === 'USD' && !cfd) ? 2500 : 0
     };
+    var cfdReady = false;
+    if (cfd){
+      o.pv = parseFloat(v.cfdPv) || 0; o.lotStep = 0.01; o.fractional = true;
+      if (!(o.pv > 0)) return { error: '1랏 · 1포인트당 금액을 입력해 주세요. (벤티지 나스닥100은 1)' };
+      if (!(o.amount >= 0.01)) return { error: '회당 랏 수는 0.01 이상으로 입력해 주세요.' };
+      var bal = parseNum(v.cfdBal), lev = parseFloat(v.cfdLev), so = parseFloat(v.cfdSo);
+      if (bal > 0 && lev >= 1 && so > 0){
+        if (so >= 100 * lev) return { error: '스톱아웃 값이 레버리지에 비해 너무 큽니다.' };
+        o.margin = { balance: bal, leverage: lev, stopout: so }; o.baseCapital = bal; cfdReady = true;
+      }
+    }
     if (!(o.buyPct > 0) || !(o.sellPct > 0)) return { error: '하락률과 상승률은 0보다 커야 합니다.' };
     if (o.buyPct >= 100) return { error: '하락률은 100% 미만으로 입력해 주세요.' };
     if (!(o.amount > 0)) return { error: '회당 매수 금액을 입력해 주세요.' };
@@ -963,14 +1042,38 @@ if (typeof module !== 'undefined') module.exports = {
     if (o.partialPct < 100 && o.secondSellPct > 0 && o.secondSellPct <= o.sellPct) return { error: '나머지 목표 상승률은 첫 매도 상승률보다 커야 합니다.' };
     if (taxRate < 0 || taxRate > 100) return { error: '세율은 0~100% 사이로 입력해 주세요.' };
     if (o.reduceFrom < 0 || (o.reduceFrom > 0 && !(o.reduceAmt > 0))) return { error: '감액을 켜려면 감액 후 회당 금액을 입력해 주세요.' };
-    return { o: o, basis: v.basis === 'raw' ? 'raw' : 'adj', tax: { on: !!v.tax, rate: taxRate } };
+    return { o: o, basis: v.basis === 'raw' ? 'raw' : 'adj', tax: { on: !!v.tax, rate: taxRate }, cfd: { on: cfd, ready: cfdReady } };
+  }
+  function syncCfd(){
+    var on = isCfd();
+    $('cfdBox').hidden = !on; $('cfdBox').style.display = on ? 'flex' : 'none';
+    $('amountLab').textContent = on ? '회당 매수 랏 수' : '회당 매수 금액';
+  }
+  function saveCfd(){
+    try { localStorage.setItem('sbt.cfd.v1', JSON.stringify({ cfd: isCfd(), bal: $('cfdBal').value, lev: $('cfdLev').value, so: $('cfdSo').value, pv: $('cfdPv').value, amount: isCfd() ? $('amount').value : '' })); } catch (e) {}
+  }
+  function restoreCfd(){
+    try {
+      var t = localStorage.getItem('sbt.cfd.v1'); if (!t) return;
+      var c = JSON.parse(t);
+      $('cfdBal').value = c.bal || ''; $('cfdLev').value = c.lev || ''; $('cfdSo').value = c.so || ''; $('cfdPv').value = c.pv || '1';
+      if (c.cfd){ $('cfd').checked = true; $('cur').value = 'USD'; CUR = 'USD'; if (c.amount) $('amount').value = c.amount; amtTouched = true; }
+    } catch (e) {}
+  }
+  function toggleCfd(){
+    var on = isCfd();
+    if (on && CUR !== 'USD'){ $('cur').value = 'USD'; $('cur').dispatchEvent(new Event('change')); }
+    TIERS = []; $('redFrom').value = '0'; $('redAmt').value = '0'; $('budget').value = '0';
+    if (on) setMoney($('amount'), 0.01); else setMoney($('amount'), DEFAULTS[CUR].amount);
+    amtTouched = false;
+    syncCfd(); buildChips(); buildRedChips(); renderTiers(); saveCfd(); render();
   }
   function syncTax(){
-    var us = CUR === 'USD';
+    var us = CUR === 'USD' && !isCfd();
     $('tax').disabled = !us; $('taxPct').disabled = !us || !$('tax').checked;
     $('taxHint').textContent = us
       ? '해외주식 양도소득세 방식입니다. 그 해의 매도 손익을 모두 합쳐(손실은 같은 해 안에서 상계) 250만원(1달러=1,000원 가정, $2,500)을 공제한 뒤 세율을 곱해, 매년 마지막 거래일에 낸 것으로 계산합니다. 보유 중인 평가이익에는 세금이 없습니다.'
-      : '한국 주식은 일반 개인의 매매차익이 비과세라 세금 없이 계산합니다. 증권거래세가 걱정되면 수수료에 합쳐서 넣어 주세요.';
+      : (isCfd() ? 'CFD 모드에서는 세금을 반영하지 않습니다.' : '한국 주식은 일반 개인의 매매차익이 비과세라 세금 없이 계산합니다. 증권거래세가 걱정되면 수수료에 합쳐서 넣어 주세요.');
   }
   function readParams(){ return paramsFrom(getVals()); }
 
@@ -1090,6 +1193,17 @@ if (typeof module !== 'undefined') module.exports = {
         $('ro1').textContent = c.d + ' · 종가 ' + price(c.c) + ' · 보유 ' + c.n + '차수';
       }
     });
+    if ($('c2') && res.margin){
+      var so = res.margin.stopout, cap = Math.max(so * 4, (res.margin.minLevel || 0) * 3);
+      drawChart($('c2'), {
+        h: 220, ml: 54, dates: dates, label: '마진레벨 차트', yfmt: function(v){ return Math.round(v) + '%'; },
+        series: [{ vals: res.curve.map(function(){ return so; }), cls: 'l-bh' }, { vals: res.curve.map(function(r){ return r.ml == null ? cap : Math.min(r.ml, cap); }), cls: 'l-strat' }],
+        onHover: function(i){
+          var j = i == null ? rows.length - 1 : i, c = res.curve[j];
+          $('ro2').textContent = c.d + ' · 마진레벨 ' + (c.ml == null ? '- (보유 없음)' : Math.round(c.ml).toLocaleString('ko-KR') + '%') + ' · 보유 ' + c.n + '차수';
+        }
+      });
+    }
     var vi = viewIdx(dates);
     $('zr').textContent = VIEW ? dates[vi[0]] + ' ~ ' + dates[vi[1]] : '전체 기간';
     document.querySelectorAll('.zbar [data-z]').forEach(function(b){
@@ -1104,7 +1218,7 @@ if (typeof module !== 'undefined') module.exports = {
     if (!c.total){ return '<span class="mut">매수가 없어 사이클이 없습니다.</span>'; }
     var keys = Object.keys(c.dist).map(Number).sort(function(a, b){ return a - b; });
     if (c.done){
-      h += '완료된 사이클 <b>' + c.done + '번</b> 중 ' + keys.map(function(k){ return '<b>' + k + '차수</b>까지 가서 끝난 것 ' + c.dist[k] + '번'; }).join(', ') + '. ';
+      h += '완료된 사이클 <b>' + c.done + '번</b> 중 ' + keys.map(function(k){ return '<b>' + k + '차수</b> ' + c.dist[k] + '번(' + Math.round(c.dist[k] / c.done * 100) + '%)'; }).join(', ') + '. ';
       h += '평균 보유 기간 <b>' + Math.round(c.avgDays) + '일</b>. ';
     }
     if (c.longest) h += '가장 오래 묶였던 기간 <b>' + c.longest.days + '일</b> (' + c.longest.from + ' ~ ' + (c.longest.open ? '현재, 아직 보유 중' : c.longest.to) + ', 최대 ' + c.longest.maxLots + '차수). ';
@@ -1155,26 +1269,26 @@ if (typeof module !== 'undefined') module.exports = {
       if (plain){ el.textContent = '지금은 모든 차수에 같은 금액을 넣습니다.' + (TIERS.length ? ' (금액을 입력한 구간부터 적용됩니다.)' : ''); return; }
       for (var n = 1; n <= lim + 1; n++){
         a = n <= lim ? lotAmount(o, n) : null;
-        if (prev !== null && a !== prev){ runs.push((from === n - 1 ? from : from + '~' + (n - 1)) + '차수 ' + money(prev)); from = n; }
+        if (prev !== null && a !== prev){ runs.push((from === n - 1 ? from : from + '~' + (n - 1)) + '차수 ' + fmtAmt(prev)); from = n; }
         prev = a;
       }
       el.textContent = '차수별 매수 금액: ' + runs.join(' · ') + (o.maxLots > lim ? ' …' : '') + '. 보유 중인 차수 기준이라, 일부를 팔아 차수가 줄면 금액도 그 차수 것으로 돌아갑니다.';
     })();
     var name = $('ticker').value.trim() || '종목';
-    var diff = res.retPct - res.bhPct;
+    var diff = res.retPct - res.bhPct, cfdOn = o.pv > 0, BL = o.baseCapital > 0 ? '계좌 잔고' : '최대 투입금';
 
     var h = '';
     if (!res.nBuy) h += '<div class="sample-note">매수가 한 번도 일어나지 않았습니다. 회당 매수 금액이 총 투자 한도나 종목 가격보다 큰지 확인해 주세요.</div>';
     if (SAMPLE) h += '<div class="sample-note">저장된 종목 데이터(data 폴더)를 불러오지 못해 가상의 예시 데이터를 보여 주고 있습니다. 실제 종목의 결과가 아닙니다.</div>';
     h += '<div class="headline"><span class="lab">' + esc(name) + ' · ' + rows[0].d + ' ~ ' + rows[rows.length - 1].d + ' (' + res.years.toFixed(1) + '년) · 순손익' + (o.taxPct > 0 ? ' (세금 반영)' : '') + info('pnl') + '</span>' +
          '<div class="big ' + cls(res.totalPnl) + '" id="bigPnl">' + money(res.totalPnl, true) + '</div>' +
-         '<div class="sub">최대 투입금 대비 <b class="' + cls(res.retPct) + '">' + pct(res.retPct, true) + '</b> · 같은 금액을 첫날 전부 사서 보유했다면 <b class="' + cls(res.bhPct) + '">' + pct(res.bhPct, true) + '</b> (' +
+         '<div class="sub">' + BL + ' 대비 <b class="' + cls(res.retPct) + '">' + pct(res.retPct, true) + '</b> · ' + (cfdOn ? '잔고 전액을 첫날 지수에 넣어 보유했다면' : '같은 금액을 첫날 전부 사서 보유했다면') + ' <b class="' + cls(res.bhPct) + '">' + pct(res.bhPct, true) + '</b> (' +
          'Δ ' + Math.abs(diff).toFixed(1) + '%p, 전략이 ' + (diff >= 0 ? '높음' : '낮음') + ')</div></div>';
 
     var k = [
       ['실현 손익', '<span class="' + cls(res.realized) + '">' + money(res.realized, true) + '</span>', 'real'],
       ['평가 손익 (보유분)', '<span class="' + cls(res.unrealized) + '">' + money(res.unrealized, true) + '</span>', 'unreal'],
-      ['최대 투입금', money(res.maxInvested), 'maxinv'],
+      [cfdOn ? '최대 명목금액' : '최대 투입금', money(res.maxInvested), 'maxinv'],
       ['연환산 수익률', res.cagr == null ? '-' : '<span class="' + cls(res.cagr) + '">' + pct(res.cagr, true) + '</span>', 'cagr'],
       ['손익 최대 낙폭', '<span class="down">-' + res.mddPct.toFixed(1) + '%</span> (' + money(-res.mdd) + ')', 'mdd'],
       ['최저 누적 손익', money(res.minPnl, true) + ' (' + pct(res.minPnlPct) + ')', 'minpnl'],
@@ -1183,23 +1297,32 @@ if (typeof module !== 'undefined') module.exports = {
       ['한도로 건너뛴 날', res.blockedDays + '일', 'blocked'],
       ['종료 시점 보유', res.openLots ? res.openLots + '차수 · 평단 ' + price(res.openAvg) : '없음', 'open']
     ];
+    if (res.margin){
+      k.push(['최저 마진레벨', res.margin.minLevel == null ? '-' : Math.round(res.margin.minLevel).toLocaleString('ko-KR') + '% (' + res.margin.minLevelDate + ')', 'margin']);
+      k.push(['강제청산', res.margin.nLiq + '번', 'margin']);
+    }
     if (o.taxPct > 0) k.push(['납부 세금 (추정)', '<span class="down">' + money(-res.taxPaid) + '</span>', 'tax']);
     if (o.stopPct > 0 || o.maxHoldDays > 0) k.push(['손절 / 기간 청산', res.nStop + ' / ' + res.nTime + '회', 'stops']);
     h += '<dl class="kpi">' + k.map(function(x){ return '<div><dt>' + x[0] + info(x[2]) + '</dt><dd>' + x[1] + '</dd></div>'; }).join('') + '</dl>';
 
     h += '<section><h3>사이클 요약' + info('cycle') + '</h3><div class="box" id="cycBox">' + cycleSummary(res) + '</div></section>';
 
-    var cm = [
-      ['순손익', money(res.totalPnl, true), money(res.bhPnl, true)],
-      ['수익률 (최대 투입금 기준)', pct(res.retPct, true), pct(res.bhPct, true)],
-      ['연환산 수익률', res.cagr == null ? '-' : pct(res.cagr, true), res.bhCagr == null ? '-' : pct(res.bhCagr, true)],
-      ['최대 낙폭 (계좌 평가액 기준)', '-' + res.eqMddPct.toFixed(1) + '%', '-' + res.bhMddPct.toFixed(1) + '%'],
-      ['종료 시점 평가액', money(res.eqEnd), money(res.bhEnd)]
-    ];
-    h += '<section><h3>전략 vs 단순 보유' + info('cmp') + '</h3><p class="hint">같은 자금(최대 투입금 ' + money(res.maxInvested) + ')으로 비교했습니다. 단순 보유는 첫날 전부 사서 끝까지 듭니다.</p>' +
-         '<div class="scroll"><table class="cmp"><thead><tr><th class="l">항목</th><th>분할매수 전략</th><th>단순 보유</th></tr></thead><tbody>' +
-         cm.map(function(r){ return '<tr><td class="l">' + r[0] + '</td><td class="mono">' + r[1] + '</td><td class="mono">' + r[2] + '</td></tr>'; }).join('') + '</tbody></table></div></section>';
-
+    if (cfdOn){
+      h += '<section><h3>증거금과 강제청산' + info('margin') + '</h3>';
+      if (!res.margin) h += '<div class="box">계좌 잔고, 레버리지, 스톱아웃을 입력하면 청산 여부를 계산합니다. 왼쪽의 "벤티지 CFD" 칸에 입력해 주세요.</div>';
+      else {
+        var mgn = res.margin, totLot = res.maxQty / o.pv;
+        h += '<div class="box" id="mgBox">최저 마진레벨 <b>' + (mgn.minLevel == null ? '-' : Math.round(mgn.minLevel).toLocaleString('ko-KR') + '%') + '</b> (' + (mgn.minLevelDate || '-') + ', 그날 최저가 기준) · 스톱아웃 ' + mgn.stopout + '%<br>' +
+          (mgn.nLiq ? '<b class="up">강제청산 ' + mgn.nLiq + '번</b> (' + mgn.liqDates.slice(0, 6).join(', ') + (mgn.liqDates.length > 6 ? ' …' : '') + ')' : '<b>강제청산 없음</b>') +
+          (mgn.nMarginBlocked ? ' · 증거금이 모자라 매수가 거절된 횟수 <b>' + mgn.nMarginBlocked + '</b>' : '') + '<br>' +
+          '가장 많이 쌓았을 때 총 <b>' + (Math.round(totLot * 100) / 100) + '랏</b> · 최대 사용 증거금 <b>' + money(mgn.maxUsed) + '</b> (잔고의 ' + (mgn.maxUsed / mgn.balance * 100).toFixed(0) + '%)</div>' +
+          '<div class="legend" style="margin-top:10px"><span><i style="border-color:var(--accent)"></i>마진레벨 (그날 최저가 기준)</span><span><i style="border-color:var(--muted);border-top-style:dashed"></i>스톱아웃</span></div>' +
+          '<div class="readout" id="ro2"></div><div class="chart" id="c2"></div>' +
+          '<h3 style="margin-top:16px;font-size:14px">회당 랏 × 최대 차수별 청산 여부</h3><p class="hint">같은 기간·같은 조건에서 회당 랏 수와 최대 차수만 바꿔 본 <b>최저 마진레벨</b>입니다. 초록은 스톱아웃의 1.5배 이상 유지, 노랑은 아슬아슬하거나 증거금 부족으로 주문이 거절됨, 빨강은 강제청산입니다. 칸을 누르면 그 값이 적용됩니다.</p>' +
+          '<div class="scroll" id="cfdGrid"><p class="hint">계산 중...</p></div><p class="hint" id="cfdBest" style="margin-top:8px"></p>';
+      }
+      h += '</section>';
+    }
     h += '<section><h3>가격과 매매 시점</h3><p class="hint">▲ 매수, ▼ 매도. 차트 위를 드래그하면 확대됩니다.' + info('zoom') + '</p>' +
          '<div class="zbar" id="zbar"><button type="button" class="chip" data-z="all" aria-pressed="true">전체</button>' +
          [1, 3, 5, 10].map(function(y){ return '<button type="button" class="chip" data-z="' + y + '" aria-pressed="false">최근 ' + y + '년</button>'; }).join('') +
@@ -1210,7 +1333,7 @@ if (typeof module !== 'undefined') module.exports = {
     h += '<section><h3>저장한 설정과 나란히 비교</h3><p class="hint">지금 설정에 이름을 붙여 저장해 두면, 같은 종목·같은 기간에서 저장한 설정들의 결과를 한 표로 볼 수 있습니다. 이 브라우저에만 저장됩니다.</p>' +
          '<div class="inl"><input type="text" id="pname" placeholder="설정 이름 (예: -5/+10 기본)" maxlength="30"><button type="button" class="primary" id="psave">현재 설정 저장</button></div>' +
          '<div class="scroll" id="plist"></div></section>';
-    if (SAVED.length){
+    if (SAVED.length && !cfdOn){
       h += '<section><h3>여러 종목 한 번에 비교</h3><p class="hint">지금 설정과 기간(시작일·종료일)을 저장된 종목 전부에 똑같이 적용한 결과입니다. 통화가 다르면 금액을 1달러=1,000원으로 환산하고, 세금 반영을 켰다면 미국 종목에만 적용합니다.</p>' +
            '<p class="hint" id="mmsg"></p><div class="scroll" id="mres"></div></section>';
     }
@@ -1290,6 +1413,7 @@ if (typeof module !== 'undefined') module.exports = {
 
     /* 여러 종목 비교 */
     if ($('mres')) runMulti(o, basis, pr.tax);
+    if ($('cfdGrid')) runCfdGrid(rows, o);
 
     /* 매매 내역 */
     var tr = res.trades, show = tr.slice(-300).reverse();
@@ -1297,7 +1421,7 @@ if (typeof module !== 'undefined') module.exports = {
     var lt = '<table><thead><tr><th>날짜</th><th>구분</th><th>체결가</th><th>수량</th><th>금액</th><th>실현 손익</th><th class="l">비고</th></tr></thead><tbody>';
     show.forEach(function(x){
       lt += '<tr><td class="mono">' + x.d + '</td><td><span class="tag ' + (x.side === 'B' ? 'b">매수' : 's">매도') + '</span></td>' +
-            '<td class="mono">' + price(x.p) + '</td><td class="mono">' + (o.fractional || x.sh % 1 ? x.sh.toFixed(3) : Math.round(x.sh).toLocaleString('ko-KR')) + '</td>' +
+            '<td class="mono">' + price(x.p) + '</td><td class="mono">' + (o.pv > 0 ? (x.sh / o.pv).toFixed(2) + '랏' : (o.fractional || x.sh % 1 ? x.sh.toFixed(3) : Math.round(x.sh).toLocaleString('ko-KR'))) + '</td>' +
             '<td class="mono">' + money(x.amt) + '</td><td class="mono ' + (x.pnl == null ? '' : cls(x.pnl)) + '">' + (x.pnl == null ? '-' : money(x.pnl, true)) + '</td>' +
             '<td class="l">' + esc(x.note) + '</td></tr>';
     });
@@ -1307,6 +1431,56 @@ if (typeof module !== 'undefined') module.exports = {
   }
 
   /* ---------- 여러 종목 비교 ---------- */
+  var CSEQ = 0;
+  function runCfdGrid(rows, o){
+    var seq = ++CSEQ, host = $('cfdGrid'), best = $('cfdBest');
+    var sizes = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1], cols = [3, 5, 7, 10, 15, 20];
+    if (sizes.indexOf(o.amount) < 0) sizes.push(o.amount);
+    if (cols.indexOf(o.maxLots) < 0) cols.push(o.maxLots);
+    sizes.sort(function(a, b){ return a - b; }); cols.sort(function(a, b){ return a - b; });
+    var so = o.margin.stopout, cells = {}, ri = 0;
+    function row(){
+      if (seq !== CSEQ || !$('cfdGrid')) return;
+      if (ri >= sizes.length){ finish(); return; }
+      var size = sizes[ri++], f = size / o.amount;
+      cols.forEach(function(ml){
+        var oo = Object.assign({}, o, { amount: size, maxLots: ml, reduceAmt: o.reduceAmt * f,
+          tiers: (o.tiers || []).map(function(t){ return { from: t.from, amount: t.amount * f }; }) });
+        cells[size + '|' + ml] = backtest(rows, oo);
+      });
+      setTimeout(row, 0);
+    }
+    function finish(){
+      var t = '<table class="mg cmp"><thead><tr><th class="l">회당 랏 \\ 최대 차수</th>' + cols.map(function(c){ return '<th>' + c + '차수</th>'; }).join('') + '</tr></thead><tbody>';
+      var bestOk = null, bestSafe = null;
+      sizes.forEach(function(size){
+        t += '<tr><td class="l">' + (Math.round(size * 100) / 100) + '랏</td>';
+        cols.forEach(function(ml){
+          var r = cells[size + '|' + ml], m = r.margin, cl, txt;
+          var ok = m.nLiq === 0 && m.nMarginBlocked === 0, safe = ok && m.minLevel != null && m.minLevel >= so * 1.5 || (ok && m.minLevel == null);
+          if (m.nLiq > 0){ cl = 'badc'; txt = '✗ ' + m.nLiq + '회'; }
+          else { cl = safe ? 'okc' : 'warnc'; txt = m.minLevel == null ? '-' : Math.round(m.minLevel).toLocaleString('ko-KR') + '%'; }
+          var tot = r.maxQty / o.pv;
+          if (ok && (!bestOk || tot > bestOk.tot)) bestOk = { size: size, ml: ml, tot: tot, r: r };
+          if (safe && (!bestSafe || tot > bestSafe.tot)) bestSafe = { size: size, ml: ml, tot: tot, r: r };
+          var cur = Math.abs(size - o.amount) < 1e-9 && ml === o.maxLots;
+          t += '<td class="mgc ' + cl + (cur ? ' cur' : '') + '" tabindex="0" role="button" data-s="' + size + '" data-m="' + ml + '" title="' + esc((Math.round(size * 100) / 100) + '랏 × 최대 ' + ml + '차수 · 최대 총 ' + (Math.round(tot * 100) / 100) + '랏 · 최저 마진레벨 ' + (m.minLevel == null ? '-' : Math.round(m.minLevel) + '% (' + m.minLevelDate + ')') + ' · 청산 ' + m.nLiq + '번 · 거절된 매수 ' + m.nMarginBlocked + ' · 순손익 ' + money(r.totalPnl, true)) + '">' + txt + '</td>';
+        });
+        t += '</tr>';
+      });
+      host.innerHTML = t + '</tbody></table>';
+      host.querySelectorAll('td.mgc').forEach(function(td){
+        var apply = function(){ setMoney($('amount'), +td.dataset.s); amtTouched = true; $('maxLots').value = td.dataset.m; saveCfd(); render(); };
+        td.addEventListener('click', apply);
+        td.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); apply(); } });
+      });
+      var line = function(b){ return (Math.round(b.size * 100) / 100) + '랏 × 최대 ' + b.ml + '차수 (최대 총 ' + (Math.round(b.tot * 100) / 100) + '랏, 최저 마진레벨 ' + Math.round(b.r.margin.minLevel) + '%, 순손익 ' + money(b.r.totalPnl, true) + ')'; };
+      best.innerHTML = (bestOk ? '청산 없이 가장 많이 쌓은 조합: <b>' + line(bestOk) + '</b>' : '<b>이 기간에서는 청산 없이 버티는 조합이 표에 없습니다.</b>') +
+        (bestSafe ? '<br>여유(스톱아웃 1.5배 이상)를 두고 가장 많이 쌓은 조합: <b>' + line(bestSafe) + '</b>' : '') +
+        '<br><span class="mut">선택한 기간만 검사한 결과입니다. 위기 구간 버튼(2000, 2008, 2020, 2022)으로 가장 나쁜 구간도 함께 확인해 보세요.</span>';
+    }
+    setTimeout(row, 30);
+  }
   var MSEQ = 0, MULTI_HTML = '';
   function runMulti(o, basis, tax){
     var seq = ++MSEQ, host = $('mres'), msg = $('mmsg');
@@ -1330,10 +1504,10 @@ if (typeof module !== 'undefined') module.exports = {
     chain.then(function(){
       if (seq !== MSEQ || !$('mres')) return;
       results.sort(function(a, b){ return b.r.retPct - a.r.retPct; });
-      var t = '<table class="cmp"><thead><tr><th class="l">종목</th><th>기간</th><th>순손익</th><th>수익률</th><th>연환산</th><th>최대 낙폭</th><th>매수/매도</th><th>단순 보유</th><th>단순 보유 연환산</th></tr></thead><tbody>';
+      var t = '<table class="cmp multi"><thead><tr><th class="l">종목</th><th>기간</th><th>순손익</th><th>수익률</th><th>연환산</th><th>최대 낙폭</th><th>매수/매도</th><th>단순 보유</th><th>단순 보유 연환산</th></tr></thead><tbody>';
       results.forEach(function(x){
         var r = x.r;
-        t += '<tr><td class="l">' + esc(x.en.name || x.en.t.toUpperCase()) + '</td><td class="mono">' + x.from.slice(0, 7) + ' ~ ' + x.to.slice(0, 7) + '</td>' +
+        t += '<tr><td class="l" title="' + esc(x.en.name || x.en.t.toUpperCase()) + '">' + esc(x.en.name || x.en.t.toUpperCase()) + '</td><td class="mono">' + x.from.slice(2, 7).replace('-', '.') + '~' + x.to.slice(2, 7).replace('-', '.') + '</td>' +
           '<td class="mono ' + cls(r.totalPnl) + '">' + money(r.totalPnl, true, x.c) + '</td><td class="mono ' + cls(r.retPct) + '">' + pct(r.retPct, true) + '</td>' +
           '<td class="mono">' + (r.cagr == null ? '-' : pct(r.cagr, true)) + '</td><td class="mono">-' + r.mddPct.toFixed(1) + '%</td><td class="mono">' + r.nBuy + ' / ' + r.nSell + '</td>' +
           '<td class="mono ' + cls(r.bhPct) + '">' + pct(r.bhPct, true) + '</td><td class="mono">' + (r.bhCagr == null ? '-' : pct(r.bhCagr, true)) + '</td></tr>';
@@ -1355,7 +1529,7 @@ if (typeof module !== 'undefined') module.exports = {
     if (!LAST) return;
     var o = LAST.o, lines = ['날짜,구분,체결가,수량,금액,실현손익,비고'];
     LAST.res.trades.forEach(function(x){
-      lines.push([x.d, x.side === 'B' ? '매수' : '매도', x.p.toFixed(4), o.fractional ? x.sh.toFixed(6) : x.sh, x.amt.toFixed(2), x.pnl == null ? '' : x.pnl.toFixed(2), '"' + String(x.note).replace(/"/g, '""') + '"'].join(','));
+      lines.push([x.d, x.side === 'B' ? '매수' : '매도', x.p.toFixed(4), o.pv > 0 ? (x.sh / o.pv).toFixed(2) : (o.fractional ? x.sh.toFixed(6) : x.sh), x.amt.toFixed(2), x.pnl == null ? '' : x.pnl.toFixed(2), '"' + String(x.note).replace(/"/g, '""') + '"'].join(','));
     });
     download(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), fileBase() + '_매매내역.csv');
   }
@@ -1385,7 +1559,7 @@ if (typeof module !== 'undefined') module.exports = {
     var muted = getComputedStyle($('out')).getPropertyValue('--muted') || '#666';
     Promise.all([svgToImage($('c1'))]).then(function(ch){
       var W = 1200, pad = 32, dpr = 2, kp = [
-        ['순손익', money(res.totalPnl, true)], ['수익률 (최대 투입금 기준)', pct(res.retPct, true)], ['연환산 수익률', res.cagr == null ? '-' : pct(res.cagr, true)],
+        ['순손익', money(res.totalPnl, true)], ['수익률 (' + (o.baseCapital > 0 ? '계좌 잔고' : '최대 투입금') + ' 기준)', pct(res.retPct, true)], ['연환산 수익률', res.cagr == null ? '-' : pct(res.cagr, true)],
         ['손익 최대 낙폭', '-' + res.mddPct.toFixed(1) + '%'], ['매수 / 매도', res.nBuy + ' / ' + res.nSell + '회'], ['단순 보유 수익률', pct(res.bhPct, true)],
         ['최대 투입금', money(res.maxInvested)], ['최대 동시 보유', res.maxLotsHeld + '차수'], ['단순 보유 최대 낙폭', '-' + res.bhMddPct.toFixed(1) + '%']
       ];
@@ -1397,7 +1571,7 @@ if (typeof module !== 'undefined') module.exports = {
       var f = 'system-ui,"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif', y = pad;
       cx.fillStyle = fg; cx.font = '700 22px ' + f; cx.fillText(($('ticker').value.trim() || '종목') + ' 분할매수 백테스트', pad, y + 22);
       cx.fillStyle = muted; cx.font = '13px ' + f;
-      cx.fillText(LAST.rows[0].d + ' ~ ' + LAST.rows[LAST.rows.length - 1].d + ' · 하락 -' + o.buyPct + '% 매수 / 상승 +' + o.sellPct + '% 매도 · 회당 ' + money(o.amount) + ' · 수수료 ' + o.feePct + '%' + (o.fill === 'open' ? ' · 다음날 시가 체결' : ' · 종가 체결') + (o.taxPct > 0 ? ' · 세금 ' + o.taxPct + '% 반영' : '') + ' · ' + (LAST.basis === 'raw' ? '원종가' : '수정종가'), pad, y + 46);
+      cx.fillText(LAST.rows[0].d + ' ~ ' + LAST.rows[LAST.rows.length - 1].d + ' · 하락 -' + o.buyPct + '% 매수 / 상승 +' + o.sellPct + '% 매도 · 회당 ' + (o.pv > 0 ? o.amount + '랏' : money(o.amount)) + ' · 수수료 ' + o.feePct + '%' + (o.fill === 'open' ? ' · 다음날 시가 체결' : ' · 종가 체결') + (o.taxPct > 0 ? ' · 세금 ' + o.taxPct + '% 반영' : '') + ' · ' + (LAST.basis === 'raw' ? '원종가' : '수정종가'), pad, y + 46);
       y += 70;
       kp.forEach(function(p, i){
         var col = i % 3, row = Math.floor(i / 3), x = pad + col * (cw / 3);
@@ -1433,6 +1607,7 @@ if (typeof module !== 'undefined') module.exports = {
   }
 
   $('cur').addEventListener('change', function(){
+    if (isCfd() && $('cur').value === 'KRW'){ $('cfd').checked = false; syncCfd(); setMoney($('amount'), DEFAULTS.USD.amount); TIERS = []; $('redFrom').value = '0'; saveCfd(); }
     var prev = CUR; CUR = $('cur').value;
     var curAmt = parseNum($('amount').value), ci = CHIPS[prev].indexOf(curAmt);
     if (curAmt === DEFAULTS[prev].amount) setMoney($('amount'), DEFAULTS[CUR].amount);
@@ -1453,6 +1628,9 @@ if (typeof module !== 'undefined') module.exports = {
     $(id).addEventListener('input', schedule);
     $(id).addEventListener('change', function(){ VIEW = null; schedule(); });
   });
+  $('cfd').addEventListener('change', toggleCfd);
+  ['cfd', 'cfdBal', 'cfdLev', 'cfdSo', 'cfdPv'].forEach(function(id){ $(id).addEventListener('input', saveCfd); $(id).addEventListener('change', saveCfd); });
+  $('cfdBal').addEventListener('input', function(){ fmtInput($('cfdBal')); });
   ['amount', 'budget', 'redAmt'].forEach(function(id){ $(id).addEventListener('input', function(){ if (id === 'amount') amtTouched = true; fmtInput($(id)); }); });
   var rt = null;
   window.addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(function(){ drawCharts(); }, 150); });
@@ -1515,11 +1693,12 @@ if (typeof module !== 'undefined') module.exports = {
           loadText(txt, e.name || e.t.toUpperCase());
         }).catch(function(er){ $('err').textContent = er.message; });
       });
-      if (SAMPLE){ sel.value = '0'; sel.dispatchEvent(new Event('change')); } else if (LAST) render();
+      if (SAMPLE){ var pi = 0; if (isCfd()) list.forEach(function(e, j){ if (e.t.toUpperCase() === '^NDX') pi = j; }); sel.value = String(pi); sel.dispatchEvent(new Event('change')); } else if (LAST) render();
     }).catch(function(){ /* data 폴더가 없으면 목록을 숨긴 채로 둠 */ });
   }
   loadSavedList();
 
+  restoreCfd(); syncCfd();
   buildChips();
   buildRedChips();
   renderTiers();
