@@ -211,12 +211,19 @@ table.mg td.mgc{cursor:pointer}
 
       <div class="group">
         <h2>매도 조건</h2>
-        <div class="field"><label for="sellPct">상승률 (%)</label><input type="number" id="sellPct" value="10" min="0.1" max="500" step="any" inputmode="decimal"></div>
+        <div class="field" id="sellModeF" hidden><label for="sellMode">매도 목표 방식</label>
+          <select id="sellMode">
+            <option value="pct">상승률 (%)</option>
+            <option value="usd">수익금 ($)</option>
+          </select></div>
+        <div class="field" id="sellUsdF" hidden><label for="sellUsd">목표 수익금 ($)</label><input type="number" id="sellUsd" value="300" min="1" step="any" inputmode="decimal"></div>
+        <div class="field" id="sellPctF"><label for="sellPct">상승률 (%)</label><input type="number" id="sellPct" value="10" min="0.1" max="500" step="any" inputmode="decimal"></div>
         <div class="field"><label for="sellRef">상승 기준</label>
           <select id="sellRef">
             <option value="avg">평단 대비 (전량 매도)</option>
             <option value="lot">차수별 매수가 대비 (해당 차수만 매도)</option>
           </select></div>
+        <p class="hint" id="sellUsdHint" hidden>수익금 방식에서는 분할 매도(첫 매도 비율)가 적용되지 않습니다.</p>
       </div>
 
       <div class="group">
@@ -449,6 +456,7 @@ function lotAmount(o, lotNo){
       fill:'close'|'open', perDay(하루 최대 매수 차수),
       stopPct(평단 대비 손절, 0=끔), cooldown(손절 후 쉬는 거래일), maxHoldDays(0=끔),
       partialPct(100=전량), secondSellPct(분할 매도 뒤 잔량 목표),
+      sellUsd(>0이면 상승률 대신 수익금($)으로 매도: avg=전체 평가손익 합계, lot=차수별 평가손익, 분할매도 미적용),
       acct, weightPct(계좌 총액 x 최대 비중 = 투입 한도)}
 */
 function backtest(rows, o){
@@ -458,7 +466,8 @@ function backtest(rows, o){
   var stopPct = o.stopPct > 0 ? o.stopPct : 0;
   var cooldown = Math.max(0, Math.floor(o.cooldown || 0));
   var maxHold = o.maxHoldDays > 0 ? o.maxHoldDays : 0;
-  var partPct = (o.partialPct > 0 && o.partialPct < 100) ? o.partialPct : 100;
+  var sellUsd = o.sellUsd > 0 ? o.sellUsd : 0;
+  var partPct = (!sellUsd && o.partialPct > 0 && o.partialPct < 100) ? o.partialPct : 100;
   var second = o.secondSellPct > 0 ? o.secondSellPct : o.sellPct * 2;
   var budget = o.budget || 0;
   var pv = o.pv > 0 ? o.pv : 0, lotStep = o.lotStep > 0 ? o.lotStep : 0.01;
@@ -494,6 +503,14 @@ function backtest(rows, o){
       for (k = 0; k < nl; k++) items.push({ lot: lots[k], frac: 1 });
       return { reason: 'time', single: true, items: items, note: nl + '차수 기간 청산 (평단 ' + avg.toFixed(2) + ')' };
     }
+    if (sellUsd && o.sellRef === 'avg'){
+      var gain = s.sh * c - s.cost;
+      if (gain >= sellUsd - EPS){
+        for (k = 0; k < nl; k++) items.push({ lot: lots[k], frac: 1 });
+        return { reason: 'target', single: true, items: items, note: nl + '차수 전량 (평가손익 $' + gain.toFixed(0) + ' ≥ 목표 $' + sellUsd + ')' };
+      }
+      return null;
+    }
     if (o.sellRef === 'avg'){
       if (!partDone){
         if (c >= avg * (1 + o.sellPct / 100) - EPS){
@@ -511,7 +528,7 @@ function backtest(rows, o){
     for (k = 0; k < nl; k++){
       l = lots[k];
       if (!l.part){
-        if (c >= l.p * (1 + o.sellPct / 100) - EPS){
+        if (sellUsd ? (l.sh * c - l.cost >= sellUsd - EPS) : (c >= l.p * (1 + o.sellPct / 100) - EPS)){
           items.push(partPct < 100
             ? { lot: l, frac: partPct / 100, setPart: true, note: l.n + '차수 매수가 ' + l.p + ' 분할 ' + partPct + '%' }
             : { lot: l, frac: 1, note: l.n + '차수 매수가 ' + l.p });
@@ -734,7 +751,7 @@ function summarizeCycles(curve, trades, rows){
 function sweep(rows, o, buyList, sellList){
   return buyList.map(function(b){
     return sellList.map(function(s){
-      var r = backtest(rows, Object.assign({}, o, { buyPct: b, sellPct: s }));
+      var r = backtest(rows, Object.assign({}, o, o.sellUsd > 0 ? { buyPct: b, sellUsd: s } : { buyPct: b, sellPct: s }));
       return { b: b, s: s, ret: r.retPct, pnl: r.totalPnl, inv: r.maxInvested };
     });
   });
@@ -972,7 +989,7 @@ if (typeof module !== 'undefined') module.exports = {
   }
 
   /* ---------- 설정 읽기 / 저장용 스냅샷 ---------- */
-  var FIELDS = ['cfd','cfdBal','cfdLev','cfdSo','cfdPv','buyPct','sellPct','buyRef','sellRef','amount','maxLots','budget','fee','tax','taxPct','frac','fill','perDay','basis','stop','cool','hold','part','second','redFrom','redAmt'];
+  var FIELDS = ['cfd','cfdBal','cfdLev','cfdSo','cfdPv','buyPct','sellPct','sellMode','sellUsd','buyRef','sellRef','amount','maxLots','budget','fee','tax','taxPct','frac','fill','perDay','basis','stop','cool','hold','part','second','redFrom','redAmt'];
   var TIERS = []; /* [{from, amt}] 문자열 */
   function getVals(){
     var v = { cur: CUR };
@@ -1004,6 +1021,7 @@ if (typeof module !== 'undefined') module.exports = {
     });
     var o = {
       buyPct: parseFloat(v.buyPct), sellPct: parseFloat(v.sellPct), buyRef: v.buyRef, sellRef: v.sellRef,
+      sellUsd: (cfd && v.sellMode === 'usd') ? (parseFloat(v.sellUsd) || 0) : 0,
       amount: parseNum(v.amount) * k, maxLots: parseInt(v.maxLots, 10),
       budget: (parseNum(v.budget) || 0) * k, feePct: parseFloat(v.fee) || 0, fractional: !!v.frac,
       tiers: tiers,
@@ -1024,7 +1042,8 @@ if (typeof module !== 'undefined') module.exports = {
         o.margin = { balance: bal, leverage: lev, stopout: so }; o.baseCapital = bal; cfdReady = true;
       }
     }
-    if (!(o.buyPct > 0) || !(o.sellPct > 0)) return { error: '하락률과 상승률은 0보다 커야 합니다.' };
+    if (cfd && v.sellMode === 'usd' && !(o.sellUsd > 0)) return { error: '목표 수익금($)을 0보다 크게 입력해 주세요.' };
+    if (!(o.buyPct > 0) || (!(o.sellUsd > 0) && !(o.sellPct > 0))) return { error: '하락률과 상승률은 0보다 커야 합니다.' };
     if (o.buyPct >= 100) return { error: '하락률은 100% 미만으로 입력해 주세요.' };
     if (!(o.amount > 0)) return { error: '회당 매수 금액을 입력해 주세요.' };
     if (!(o.maxLots >= 1)) return { error: '최대 차수는 1 이상이어야 합니다.' };
@@ -1039,7 +1058,7 @@ if (typeof module !== 'undefined') module.exports = {
     if (o.stopPct < 0 || o.stopPct >= 100) return { error: '손절 비율은 0 이상 100 미만으로 입력해 주세요.' };
     if (o.cooldown < 0 || o.maxHoldDays < 0) return { error: '쉬는 거래일과 보유 기간은 0 이상이어야 합니다.' };
     if (o.partialPct < 1 || o.partialPct > 100) return { error: '첫 매도 비율은 1~100 사이로 입력해 주세요.' };
-    if (o.partialPct < 100 && o.secondSellPct > 0 && o.secondSellPct <= o.sellPct) return { error: '나머지 목표 상승률은 첫 매도 상승률보다 커야 합니다.' };
+    if (!(o.sellUsd > 0) && o.partialPct < 100 && o.secondSellPct > 0 && o.secondSellPct <= o.sellPct) return { error: '나머지 목표 상승률은 첫 매도 상승률보다 커야 합니다.' };
     if (taxRate < 0 || taxRate > 100) return { error: '세율은 0~100% 사이로 입력해 주세요.' };
     if (o.reduceFrom < 0 || (o.reduceFrom > 0 && !(o.reduceAmt > 0))) return { error: '감액을 켜려면 감액 후 회당 금액을 입력해 주세요.' };
     return { o: o, basis: v.basis === 'raw' ? 'raw' : 'adj', tax: { on: !!v.tax, rate: taxRate }, cfd: { on: cfd, ready: cfdReady } };
@@ -1048,6 +1067,15 @@ if (typeof module !== 'undefined') module.exports = {
     var on = isCfd();
     $('cfdBox').hidden = !on; $('cfdBox').style.display = on ? 'flex' : 'none';
     $('amountLab').textContent = on ? '회당 매수 랏 수' : '회당 매수 금액';
+    syncSell();
+  }
+  function syncSell(){
+    var cfdOn = isCfd(), usd = cfdOn && $('sellMode').value === 'usd';
+    $('sellModeF').hidden = !cfdOn; $('sellUsdF').hidden = !usd; $('sellPctF').hidden = usd; $('sellUsdHint').hidden = !usd;
+    var opts = $('sellRef').options;
+    opts[0].textContent = usd ? '전체 포지션 수익금 (전량 매도)' : '평단 대비 (전량 매도)';
+    opts[1].textContent = usd ? '차수별 수익금 (해당 차수만 매도)' : '차수별 매수가 대비 (해당 차수만 매도)';
+    $('sellRef').previousElementSibling.textContent = usd ? '수익금 기준' : '상승 기준';
   }
   function saveCfd(){
     try { localStorage.setItem('sbt.cfd.v1', JSON.stringify({ cfd: isCfd(), bal: $('cfdBal').value, lev: $('cfdLev').value, so: $('cfdSo').value, pv: $('cfdPv').value, amount: isCfd() ? $('amount').value : '' })); } catch (e) {}
@@ -1328,7 +1356,7 @@ if (typeof module !== 'undefined') module.exports = {
          [1, 3, 5, 10].map(function(y){ return '<button type="button" class="chip" data-z="' + y + '" aria-pressed="false">최근 ' + y + '년</button>'; }).join('') +
          '<button type="button" class="chip" data-z="reset">확대 해제</button><span class="zr" id="zr"></span></div>' +
          '<div class="readout" id="ro1"></div><div class="chart" id="c1"></div></section>';
-    h += '<section><h3>하락률 × 상승률 비교' + info('hm') + '</h3><p class="hint">다른 설정은 그대로 두고 두 비율만 바꿔 본 <b>순손익(금액)</b>입니다. ★ 가 가장 많이 번 조합이고, 칸을 누르면 그 값이 적용됩니다.</p>' +
+    h += '<section><h3>하락률 × ' + (o.sellUsd > 0 ? '목표 수익금' : '상승률') + ' 비교' + info('hm') + '</h3><p class="hint">다른 설정은 그대로 두고 ' + (o.sellUsd > 0 ? '하락률과 목표 수익금만' : '두 비율만') + ' 바꿔 본 <b>순손익(금액)</b>입니다. ★ 가 가장 많이 번 조합이고, 칸을 누르면 그 값이 적용됩니다.</p>' +
          '<div class="scroll" id="hm"></div><p class="hint" id="hmBest" style="margin-top:8px"></p></section>';
     h += '<section><h3>저장한 설정과 나란히 비교</h3><p class="hint">지금 설정에 이름을 붙여 저장해 두면, 같은 종목·같은 기간에서 저장한 설정들의 결과를 한 표로 볼 수 있습니다. 이 브라우저에만 저장됩니다.</p>' +
          '<div class="inl"><input type="text" id="pname" placeholder="설정 이름 (예: -5/+10 기본)" maxlength="30"><button type="button" class="primary" id="psave">현재 설정 저장</button></div>' +
@@ -1363,23 +1391,23 @@ if (typeof module !== 'undefined') module.exports = {
     drawCharts();
 
     /* 히트맵: 칸 값은 순손익(금액), ★ 는 가장 많이 번 조합 */
-    var bl = [2, 3, 5, 7, 10], sl = [5, 7, 10, 15, 20];
+    var usdM = o.sellUsd > 0, bl = [2, 3, 5, 7, 10], sl = usdM ? [0.5, 0.75, 1, 1.5, 2].map(function(m){ return Math.round(o.sellUsd * m * 100) / 100; }) : [5, 7, 10, 15, 20];
     var sw = sweep(rows, o, bl, sl), maxAbs = 1, best = null;
     sw.forEach(function(r){ r.forEach(function(c){ maxAbs = Math.max(maxAbs, Math.abs(c.pnl)); if (!best || c.pnl > best.pnl) best = c; }); });
-    var t = '<table class="hm"><thead><tr><th class="axis l">하락 \\ 상승</th>' + sl.map(function(s){ return '<th class="axis">+' + s + '%</th>'; }).join('') + '</tr></thead><tbody>';
+    var t = '<table class="hm"><thead><tr><th class="axis l">하락 \\ 상승</th>' + sl.map(function(s){ return '<th class="axis">+' + (usdM ? '$' + s.toLocaleString('en-US') : s + '%') + '</th>'; }).join('') + '</tr></thead><tbody>';
     sw.forEach(function(r, ri){
       t += '<tr><th class="axis l">-' + bl[ri] + '%</th>';
       r.forEach(function(c){
-        var cur = Math.abs(c.b - o.buyPct) < 1e-9 && Math.abs(c.s - o.sellPct) < 1e-9;
+        var cur = Math.abs(c.b - o.buyPct) < 1e-9 && Math.abs(c.s - (usdM ? o.sellUsd : o.sellPct)) < 1e-9;
         var a = Math.round(Math.min(1, Math.abs(c.pnl) / maxAbs) * 55);
         t += '<td class="cell' + (c.pnl < 0 ? ' neg' : '') + (cur ? ' cur' : '') + (c === best ? ' best' : '') + '" tabindex="0" role="button" style="--a:' + a + '%" data-b="' + c.b + '" data-s="' + c.s + '" title="순손익 ' + money(c.pnl, true) + ' · 수익률 ' + pct(c.ret, true) + ' · 최대 투입금 ' + money(c.inv) + '">' + (c === best ? '★ ' : '') + cmoney(c.pnl) + '</td>';
       });
       t += '</tr>';
     });
     $('hm').innerHTML = t + '</tbody></table>';
-    $('hmBest').innerHTML = '가장 많이 번 조합: 하락 <b>-' + best.b + '%</b> / 상승 <b>+' + best.s + '%</b> → 순손익 <b class="' + cls(best.pnl) + '">' + money(best.pnl, true) + '</b> (최대 투입금 대비 ' + pct(best.ret, true) + ')';
+    $('hmBest').innerHTML = '가장 많이 번 조합: 하락 <b>-' + best.b + '%</b> / 상승 <b>+' + (usdM ? '$' + best.s.toLocaleString('en-US') : best.s + '%') + '</b> → 순손익 <b class="' + cls(best.pnl) + '">' + money(best.pnl, true) + '</b> (최대 투입금 대비 ' + pct(best.ret, true) + ')';
     $('hm').querySelectorAll('td.cell').forEach(function(td){
-      var apply = function(){ $('buyPct').value = td.dataset.b; $('sellPct').value = td.dataset.s; render(); };
+      var apply = function(){ $('buyPct').value = td.dataset.b; $(usdM ? 'sellUsd' : 'sellPct').value = td.dataset.s; render(); };
       td.addEventListener('click', apply);
       td.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); apply(); } });
     });
@@ -1571,7 +1599,7 @@ if (typeof module !== 'undefined') module.exports = {
       var f = 'system-ui,"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif', y = pad;
       cx.fillStyle = fg; cx.font = '700 22px ' + f; cx.fillText(($('ticker').value.trim() || '종목') + ' 분할매수 백테스트', pad, y + 22);
       cx.fillStyle = muted; cx.font = '13px ' + f;
-      cx.fillText(LAST.rows[0].d + ' ~ ' + LAST.rows[LAST.rows.length - 1].d + ' · 하락 -' + o.buyPct + '% 매수 / 상승 +' + o.sellPct + '% 매도 · 회당 ' + (o.pv > 0 ? o.amount + '랏' : money(o.amount)) + ' · 수수료 ' + o.feePct + '%' + (o.fill === 'open' ? ' · 다음날 시가 체결' : ' · 종가 체결') + (o.taxPct > 0 ? ' · 세금 ' + o.taxPct + '% 반영' : '') + ' · ' + (LAST.basis === 'raw' ? '원종가' : '수정종가'), pad, y + 46);
+      cx.fillText(LAST.rows[0].d + ' ~ ' + LAST.rows[LAST.rows.length - 1].d + ' · 하락 -' + o.buyPct + '% 매수 / ' + (o.sellUsd > 0 ? '수익 $' + o.sellUsd : '상승 +' + o.sellPct + '%') + ' 매도 · 회당 ' + (o.pv > 0 ? o.amount + '랏' : money(o.amount)) + ' · 수수료 ' + o.feePct + '%' + (o.fill === 'open' ? ' · 다음날 시가 체결' : ' · 종가 체결') + (o.taxPct > 0 ? ' · 세금 ' + o.taxPct + '% 반영' : '') + ' · ' + (LAST.basis === 'raw' ? '원종가' : '수정종가'), pad, y + 46);
       y += 70;
       kp.forEach(function(p, i){
         var col = i % 3, row = Math.floor(i / 3), x = pad + col * (cw / 3);
@@ -1629,6 +1657,7 @@ if (typeof module !== 'undefined') module.exports = {
     $(id).addEventListener('change', function(){ VIEW = null; schedule(); });
   });
   $('cfd').addEventListener('change', toggleCfd);
+  $('sellMode').addEventListener('change', syncSell);
   ['cfd', 'cfdBal', 'cfdLev', 'cfdSo', 'cfdPv'].forEach(function(id){ $(id).addEventListener('input', saveCfd); $(id).addEventListener('change', saveCfd); });
   $('cfdBal').addEventListener('input', function(){ fmtInput($('cfdBal')); });
   ['amount', 'budget', 'redAmt'].forEach(function(id){ $(id).addEventListener('input', function(){ if (id === 'amount') amtTouched = true; fmtInput($(id)); }); });
