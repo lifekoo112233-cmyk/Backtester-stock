@@ -2,7 +2,7 @@
 <html lang="ko">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>전략 검증기 · 분할매수 백테스터</title>
+<title>물타기 vs 대안 · 분할매수 백테스터</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#1f5f4f">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,795 +11,1096 @@
 :root{
   --bg:#f2f4f2; --surface:#ffffff; --fg:#1a1f1c; --muted:#5b665f; --line:#dde2de;
   --accent:#1f5f4f; --accent-fg:#ffffff; --chip:#e9eeea;
-  --up:#d12f2f; --down:#2a62c9; --good:#1f8a5f; --bad:#c43c3c;
+  --up:#d12f2f; --down:#2a62c9; --good:#1f8a5f; --bad:#c43c3c; --warn:#b7791f;
   --font:'Noto Sans KR',system-ui,-apple-system,'Segoe UI',sans-serif;
   --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#111412; --surface:#1a1e1b; --fg:#e8ece9; --muted:#9aa59e; --line:#2a302c;
   --accent:#5cb89f; --accent-fg:#0c1411; --chip:#232925;
-  --up:#ff6f64; --down:#6fa3ff; --good:#4fc08d; --bad:#ff6f64; color-scheme:dark;
+  --up:#ff6f64; --down:#6fa3ff; --good:#4fc08d; --bad:#ff6f64; --warn:#e0a84a; color-scheme:dark;
 }}
 *{box-sizing:border-box}
 [hidden]{display:none !important}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.55;-webkit-text-size-adjust:100%}
-.wrap{max-width:1280px;margin:0 auto;padding:18px 14px 60px}
+.wrap{max-width:1240px;margin:0 auto;padding:18px 14px 60px}
 header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px;margin-bottom:14px}
 header h1{margin:0;font-size:20px}
 header p{margin:0;color:var(--muted);font-size:13px}
 header a{color:var(--accent);font-weight:500;text-decoration:none;margin-left:auto;font-size:13px}
-header a:hover{text-decoration:underline}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
 h2{margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
 h3{margin:0 0 8px;font-size:15px}
 .hint{color:var(--muted);font-size:12.5px;margin:4px 0 0}
-.row{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end}
-.field{display:flex;flex-direction:column;gap:4px;min-width:120px}
-.field label{font-size:12px;color:var(--muted)}
-input[type=number],input[type=date],input[type=text],select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-width:0}
-input[type=number]{width:110px;font-family:var(--mono)}
+.row{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:12px;color:var(--muted);white-space:nowrap}
+input[type=number],input[type=date],input[type=text],select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-width:0;max-width:100%}
+input[type=number],input[type=text].num{width:120px;font-family:var(--mono)}
 button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:7px 12px}
 button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
-button:disabled{opacity:.5;cursor:default}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{border:1px solid var(--line);background:var(--chip);border-radius:999px;padding:4px 11px;font-size:12.5px;cursor:pointer;user-select:none}
+.chip{border:1px solid var(--line);background:var(--chip);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;user-select:none}
 .chip.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
-.chip.lev{border-style:dashed}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:7px 14px}
+.seg button.on{background:var(--accent);color:var(--accent-fg)}
+.check{display:flex;align-items:center;gap:6px;font-size:13px}
 .prog{height:6px;background:var(--chip);border-radius:3px;overflow:hidden;margin-top:10px;display:none}
 .prog i{display:block;height:100%;background:var(--accent);width:0;transition:width .15s}
+.err{color:var(--up);font-size:13px;margin-top:6px;min-height:1em}
+.sum{font-size:14px;margin:0 0 12px;padding:12px 14px;border-left:3px solid var(--accent);background:var(--bg);border-radius:0 8px 8px 0;line-height:1.7}
+.sum b{font-family:var(--mono);font-weight:600}
 .tablewrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:8px}
-table{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%}
-th,td{padding:6px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
-th{font-weight:600;color:var(--muted);background:var(--surface);position:sticky;top:0;z-index:1}
-th.l,td.l{text-align:left;position:sticky;left:0;background:var(--surface);z-index:2;max-width:11em;overflow:hidden;text-overflow:ellipsis}
+table{border-collapse:separate;border-spacing:0;font-size:13px;min-width:100%}
+th,td{padding:8px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;vertical-align:middle}
+th{font-weight:600;color:var(--muted);background:var(--surface);position:sticky;top:0;z-index:1;font-size:12px}
+th.l,td.l{text-align:left;position:sticky;left:0;background:var(--surface);z-index:2}
 th.l{z-index:3}
-td.cell{cursor:pointer;line-height:1.25;padding:5px 8px}
-td.cell:hover{outline:2px solid var(--accent);outline-offset:-2px}
-td.cell.sel{outline:2px solid var(--fg);outline-offset:-2px}
-td.cell .m{font-family:var(--mono);font-weight:500;display:block}
-td.cell .s{display:block;font-size:11px;color:var(--muted)}
-td.cell.base .m{color:var(--muted)}
-tr.base td{background:var(--chip)}
-.mono{font-family:var(--mono)}
-.good{color:var(--good)} .bad{color:var(--bad)}
-.legend{display:flex;flex-wrap:wrap;gap:12px;color:var(--muted);font-size:12px;margin-top:8px;align-items:center}
-.legend i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media (max-width:860px){.grid2{grid-template-columns:1fr}}
-.kv{display:grid;grid-template-columns:1fr auto;gap:2px 12px;font-size:13px;align-items:baseline}
-.kv .k{color:var(--fg)}
-.kv .v{font-family:var(--mono);font-weight:500;text-align:right;white-space:nowrap}
-.kv .sub{grid-column:1/-1;color:var(--muted);font-size:11.5px;margin:-2px 0 6px;padding-left:2px}
+tr.grp td{background:var(--chip);color:var(--muted);font-size:12px;font-weight:600;padding:5px 10px;text-align:left;position:sticky;left:0}
+tr.base td{background:color-mix(in srgb, var(--accent) 10%, var(--surface))}
+tr.v{cursor:pointer}
+tr.v:hover td{background:color-mix(in srgb, var(--accent) 6%, var(--surface))}
+tr.v.sel td{box-shadow:inset 0 2px 0 var(--fg), inset 0 -2px 0 var(--fg)}
+td .nm{font-weight:600;display:block}
+td .what{display:block;font-size:11.5px;color:var(--muted);white-space:normal;max-width:22em}
+td .m{font-family:var(--mono);display:block}
+td .d{display:block;font-size:11px;font-family:var(--mono)}
+.good{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)} .mute{color:var(--muted)}
+.verdict{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.verdict.g{background:color-mix(in srgb, var(--good) 18%, transparent);color:var(--good)}
+.verdict.b{background:color-mix(in srgb, var(--bad) 16%, transparent);color:var(--bad)}
+.verdict.w{background:color-mix(in srgb, var(--warn) 18%, transparent);color:var(--warn)}
+.verdict.m{background:var(--chip);color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1.3fr;gap:16px}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
 canvas{width:100%;height:auto;display:block}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
-.card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--bg)}
-.card h4{margin:0 0 4px;font-size:14px;display:flex;align-items:center;gap:8px}
-.card h4 input{margin:0}
-.card .tag{font-size:11px;color:var(--muted);font-weight:400;margin-left:auto}
-.card p{margin:4px 0;font-size:12.5px}
-.card .src{color:var(--muted);font-size:11.5px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;color:var(--muted);font-size:12px;margin-top:8px;align-items:center}
+.legend i{display:inline-block;width:14px;height:3px;margin-right:4px;vertical-align:3px}
+.kv{display:grid;grid-template-columns:1fr auto auto;gap:3px 14px;font-size:13px;align-items:baseline}
+.kv .h{color:var(--muted);font-size:11.5px}
+.kv .v{font-family:var(--mono);text-align:right}
+details.adv{border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+details.adv summary{cursor:pointer;color:var(--accent);font-size:13px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
+.card{border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:var(--bg);font-size:12.5px}
+.card h4{margin:0 0 3px;font-size:13.5px;display:flex;align-items:center;gap:8px}
 .card .params{display:flex;flex-wrap:wrap;gap:6px 10px;margin-top:6px}
 .card .params label{font-size:11.5px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
 .card .params input{width:80px;padding:4px 6px;font-size:12px}
-.err{color:var(--up);font-size:13px;margin-top:6px;min-height:1em}
-.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
-details summary{cursor:pointer;color:var(--accent);font-size:13px}
-.trades td,.trades th{padding:3px 7px;font-size:12px}
 .note{font-size:12.5px;color:var(--muted);line-height:1.6}
-.viewtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-.viewtabs button{padding:8px 14px;font-weight:600}
-.viewtabs button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
-.rank{display:flex;flex-direction:column;gap:8px}
-.rk{display:grid;grid-template-columns:30px 1fr;gap:2px 10px;align-items:start;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--bg);cursor:pointer}
-.rk>*{grid-column:2}
-.rk .money{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
-.rk .money b{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--fg)}
-.rk .money b.bad{color:var(--bad)} .rk .money b.good{color:var(--good)}
-.rk .cmp{font-size:13px;margin-top:2px}
-.rk .cmp b{font-family:var(--mono);font-weight:500}
-.rk .verdict{margin-top:6px;font-size:13.5px}
-.rk:hover{outline:2px solid var(--accent);outline-offset:-2px}
-.rk.sel{outline:2px solid var(--fg);outline-offset:-2px}
-.rk.base{border-style:dashed}
-.rk .no{grid-column:1;grid-row:1/span 6;font-family:var(--mono);font-size:18px;color:var(--muted);text-align:center;padding-top:4px}
-.rk .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
-.rk .nm{font-weight:600;font-size:15px}
-.rk .nm small{font-weight:400;color:var(--muted);font-size:12px;margin-left:6px}
-.rk .big{font-family:var(--mono);font-size:20px;font-weight:600}
-.rk .bars{display:grid;grid-template-columns:auto 1fr auto;gap:4px 8px;align-items:center;font-size:12px;color:var(--muted);margin-top:6px}
-.rk .bar{height:10px;background:var(--chip);border-radius:5px;position:relative;overflow:hidden}
-.rk .bar i{position:absolute;top:0;bottom:0;left:0;border-radius:5px}
-.rk .bar i.g{background:var(--good)} .rk .bar i.b{background:var(--bad)} .rk .bar i.m{background:var(--muted)}
-.rk .bar em{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--fg);opacity:.7}
-.rk .v{font-family:var(--mono);min-width:5.5em;text-align:right;color:var(--fg)}
-.rk .verdict{font-size:12.5px;color:var(--muted)}
-.rk .verdict.good{color:var(--good)} .rk .verdict.bad{color:var(--bad)}
-.subhead{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:10px}
-.subhead .chips{flex:1}
-.sum{font-size:13.5px;margin:0 0 10px;padding:10px 12px;border-left:3px solid var(--accent);background:var(--bg);border-radius:0 8px 8px 0}
-@media (max-width:600px){.rk .big{font-size:18px}.rk .nm{font-size:14px}}
-.pill{display:inline-block;padding:1px 7px;border-radius:999px;background:var(--chip);font-size:11px;color:var(--muted);margin-left:6px}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.tabs button{padding:8px 14px;font-weight:600}
+.tabs button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.sortbar{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);margin-bottom:8px;flex-wrap:wrap}
 </style>
 <body>
 <div class="wrap">
 <header>
-  <h1>전략 검증기</h1>
-  <p>알려진 매매 전략을 저장된 모든 종목에 같은 조건으로 돌려 비교합니다 · 롱 전용 · 일봉 종가 기준</p>
+  <h1>물타기 vs 대안</h1>
+  <p>지금 쓰는 물타기 설정을 기준으로, 규칙 하나씩 바꾼 대안이 더 나은지 같은 데이터·같은 엔진으로 비교합니다</p>
   <a href="index.html">← 분할매수 백테스터</a>
 </header>
 
 <div class="panel">
-  <h2>조건</h2>
-  <div class="row">
-    <div class="field"><label for="period">기간</label>
-      <select id="period">
-        <option value="common">모든 종목 공통 구간</option>
-        <option value="full">종목별 전체 기간</option>
-        <option value="y10">최근 10년</option>
-        <option value="y5">최근 5년</option>
-        <option value="custom">직접 지정</option>
-      </select></div>
-    <div class="field" id="fromF" hidden><label for="from">시작일</label><input type="date" id="from"></div>
-    <div class="field" id="toF" hidden><label for="to">종료일</label><input type="date" id="to"></div>
-    <div class="field"><label for="fill">체결</label>
-      <select id="fill">
-        <option value="close">신호 당일 종가</option>
-        <option value="open">신호 다음 날 시가</option>
-      </select></div>
-    <div class="field"><label for="cost">비용</label>
-      <select id="cost">
-        <option value="auto">자동 (미국 0.05% · 한국 0.015%+매도세 0.18%)</option>
-        <option value="zero">비용 없음</option>
-        <option value="custom">직접 지정</option>
-      </select></div>
-    <div class="field" id="feeF" hidden><label for="fee">편도 수수료 (%)</label><input type="number" id="fee" value="0.1" step="any" min="0"></div>
-    <div class="field" id="taxF" hidden><label for="tax">매도세 (%)</label><input type="number" id="tax" value="0" step="any" min="0"></div>
-    <div class="field" id="metricF" hidden><label for="metric">전체 표 숫자</label>
-      <select id="metric">
-        <option value="cagr">연환산 수익률 (기본)</option>
-        <option value="total">총 수익률</option>
-        <option value="excess">보유 대비 초과 (연환산)</option>
-        <option value="mdd">최대 낙폭</option>
-        <option value="calmar">연환산 ÷ 최대 낙폭</option>
-        <option value="h2">후반 절반 연환산</option>
-        <option value="expo">시장 노출 비율</option>
-      </select></div>
-    <div class="field"><label>&nbsp;</label><button class="primary" id="run">다시 계산</button></div>
+  <h2>기준이 되는 물타기 설정</h2>
+  <div class="row" style="margin-bottom:12px">
+    <div class="field"><label>종목</label><div class="chips" id="tickChips"></div></div>
   </div>
-  <div style="margin-top:12px">
-    <div class="field"><label>종목 <span class="hint" style="display:inline">(점선 = 레버리지 상품)</span></label><div class="chips" id="tickChips"></div></div>
+  <div class="row" style="margin-bottom:12px">
+    <div class="field"><label>모드</label><div class="seg" id="modeSeg"><button data-m="stock" class="on">주식</button><button data-m="cfd">CFD</button></div></div>
+    <div class="field" id="presetF" hidden><label for="preset">기존 앱에 저장한 설정 불러오기</label><select id="preset"><option value="">선택…</option></select></div>
+    <div class="field"><label for="start">시작일 (비우면 처음부터)</label><input type="date" id="start"></div>
+    <div class="field"><label for="end">종료일</label><input type="date" id="end"></div>
   </div>
+  <div class="row" style="margin-bottom:12px">
+    <div class="field"><label for="buyRef">하락 기준</label>
+      <select id="buyRef"><option value="lastBuy">직전 매수가 대비</option><option value="prevClose">전일 종가 대비</option><option value="peak">직전 매수 이후 고점 대비</option></select></div>
+    <div class="field" id="buyModeF" hidden><label for="buyMode">하락 단위</label><select id="buyMode"><option value="pct">%</option><option value="pts">포인트</option></select></div>
+    <div class="field" id="buyPctF"><label for="buyPct">하락률 (%)</label><input type="number" id="buyPct" value="5" step="any" min="0.1"></div>
+    <div class="field" id="buyPtsF" hidden><label for="buyPts">하락폭 (포인트)</label><input type="number" id="buyPts" value="100" step="any" min="0.01"></div>
+    <div class="field"><label for="amount" id="amountLab">회당 매수 금액</label><input type="text" id="amount" class="num" value="1,000" inputmode="decimal"></div>
+    <div class="field"><label for="maxLots">최대 차수</label><input type="number" id="maxLots" value="10" step="1" min="1"></div>
+  </div>
+  <div class="row" style="margin-bottom:12px">
+    <div class="field"><label for="sellRef">매도 기준</label>
+      <select id="sellRef"><option value="avg">평단 대비 (전량)</option><option value="lot">차수별 매수가 대비 (해당 차수만)</option></select></div>
+    <div class="field" id="sellModeF" hidden><label for="sellMode">매도 단위</label><select id="sellMode"><option value="pct">%</option><option value="usd">수익금 $</option></select></div>
+    <div class="field" id="sellPctF"><label for="sellPct">상승률 (%)</label><input type="number" id="sellPct" value="10" step="any" min="0.1"></div>
+    <div class="field" id="sellUsdF" hidden><label for="sellUsd">목표 수익금 ($)</label><input type="number" id="sellUsd" value="300" step="any" min="1"></div>
+    <div class="field"><label for="fill">체결</label><select id="fill"><option value="close">신호 당일 종가</option><option value="open">다음 날 시가</option></select></div>
+    <div class="field"><label for="fee">수수료 (%, 편도)</label><input type="number" id="fee" value="0.25" step="any" min="0"></div>
+  </div>
+  <div class="row" id="cfdRow" hidden style="margin-bottom:12px">
+    <div class="field"><label for="cfdBal">계좌 잔고 ($)</label><input type="text" id="cfdBal" class="num" value="100,000" inputmode="decimal"></div>
+    <div class="field"><label for="cfdLev">레버리지</label><input type="number" id="cfdLev" value="500" step="any" min="1"></div>
+    <div class="field"><label for="cfdSo">스톱아웃 (%)</label><input type="number" id="cfdSo" value="50" step="any" min="1"></div>
+    <div class="field"><label for="cfdPv">1랏 · 1포인트당 ($)</label><input type="number" id="cfdPv" value="1" step="any" min="0.0001"></div>
+    <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" id="cfdWd"> 수익금 출금 (잔고 유지)</label></div>
+  </div>
+  <details class="adv"><summary>고급 (기존 앱과 같은 항목)</summary>
+    <div class="row" style="margin-top:10px">
+      <div class="field"><label for="perDay">하루 최대 매수 차수</label><input type="number" id="perDay" value="1" step="1" min="1"></div>
+      <div class="field"><label for="budget">총 투자 한도 (0=무제한)</label><input type="text" id="budget" class="num" value="0"></div>
+      <div class="field"><label for="stop">평단 대비 손절 % (0=끔)</label><input type="number" id="stop" value="0" step="any" min="0"></div>
+      <div class="field"><label for="cool">손절 후 쉬는 날</label><input type="number" id="cool" value="0" step="1" min="0"></div>
+      <div class="field"><label for="hold">최대 보유일 (0=끔)</label><input type="number" id="hold" value="0" step="1" min="0"></div>
+      <div class="field"><label for="part">첫 매도 비율 %</label><input type="number" id="part" value="100" step="any" min="1" max="100"></div>
+      <div class="field"><label for="second">나머지 목표 %</label><input type="number" id="second" value="0" step="any" min="0"></div>
+      <div class="field"><label for="redFrom">감액 시작 차수 (0=끔)</label><input type="number" id="redFrom" value="0" step="1" min="0"></div>
+      <div class="field"><label for="redAmt">감액 후 회당 금액</label><input type="text" id="redAmt" class="num" value="0"></div>
+      <div class="field"><label for="basis">가격 기준</label><select id="basis"><option value="adj">수정종가</option><option value="raw">원종가</option></select></div>
+      <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" id="frac"> 소수점 매수 허용</label></div>
+    </div>
+    <p class="hint" id="tiersHint"></p>
+  </details>
   <div class="prog" id="prog"><i></i></div>
   <div class="err" id="err"></div>
-  <p class="hint" id="periodHint"></p>
 </div>
 
 <div class="panel">
-  <div class="viewtabs" role="tablist">
-    <button class="on" data-view="byTick">종목별 전략 순위</button>
-    <button data-view="byStrat">전략별 종목 결과</button>
-    <button data-view="matrix">전체 표</button>
+  <div class="tabs"><button class="on" data-tab="one">이 종목에서 비교</button><button data-tab="all" id="tabAllBtn">모든 종목 요약</button></div>
+  <div id="tabOne">
+    <p class="sum" id="sum"></p>
+    <div class="sortbar">정렬:
+      <span class="seg" id="sortSeg"><button data-k="group" class="on">종류별</button><button data-k="pnl">순손익</button><button data-k="mdd">낙폭</button><button data-k="stuck">물린 기간</button></span>
+    </div>
+    <div class="tablewrap" id="board"></div>
+    <p class="note" style="margin-top:8px">각 줄은 <b>기준 물타기에서 딱 하나만 바꾼</b> 결과입니다. 괄호 안 작은 숫자는 기준 대비 차이이고, 초록은 좋아진 것(더 벌거나, 덜 빠지거나, 짧게 물림), 빨강은 나빠진 것입니다. 수익률은 그 전략이 실제로 묶은 최대 금액(CFD는 잔고) 대비입니다. 줄을 누르면 아래에 기준과 겹쳐 그린 손익 곡선이 나옵니다.</p>
   </div>
-  <div id="vByTick">
-    <div class="subhead"><span class="hint" style="margin:0">종목을 고르세요</span><div class="chips" id="rkTick"></div></div>
-    <p class="sum" id="rkSum"></p>
-    <div class="rank" id="rank"></div>
-    <p class="hint" style="margin-top:10px">막대의 세로선은 "그냥 들고 있었을 때"입니다. 초록 = 그보다 많이 남김, 빨강 = 적게 남김. "최악일 때"는 중간에 고점 대비 가장 많이 빠졌던 비율이고 짧을수록 좋습니다. 항목을 누르면 아래에 상세가 열립니다.</p>
-  </div>
-  <div id="vByStrat" hidden>
-    <div class="subhead"><span class="hint" style="margin:0">전략을 고르세요</span><div class="chips" id="rkStrat"></div></div>
-    <p class="sum" id="rkSum2"></p>
-    <div class="rank" id="rank2"></div>
-  </div>
-  <div id="vMatrix" hidden>
-  <h2>전략 × 종목 성적표</h2>
-  <div class="row" style="margin-bottom:10px"><div class="field"><label for="metric2">표에 보일 숫자</label><select id="metric2"></select></div></div>
-  <div class="tablewrap" id="board"><p class="hint" style="padding:14px">데이터를 불러오는 중…</p></div>
-  <div class="legend">
-    <span><i style="background:var(--good)"></i>매수 후 보유보다 나음</span>
-    <span><i style="background:var(--bad)"></i>보유보다 못함</span>
-    <span>색 진하기 = 연환산 초과 수익 크기 · 작은 글씨 = 최대 낙폭 · 셀을 누르면 상세</span>
-  </div>
-  <p class="note" style="margin-top:8px">읽는 법: 숫자가 커도 <b>보유보다 못하면</b> 그 전략은 그 종목에서 가치를 더하지 못한 것입니다. 레버리지 상품은 보유 자체가 변동성 손실로 불리해서 거의 모든 전략이 초록으로 나오기 쉬우니, 낙폭과 연도별 표를 같이 보세요. 전략 10개 × 종목 10개 = 100칸 중 몇 칸은 우연히 좋게 나옵니다. 한 칸만 보고 결론 내리지 말고 <b>후반 절반</b>과 <b>이웃 매개변수</b>에서도 유지되는지 확인하세요.</p>
+  <div id="tabAll" hidden>
+    <p class="sum" id="sumAll"></p>
+    <div class="tablewrap" id="boardAll"></div>
+    <p class="note" style="margin-top:8px">같은 설정(비율·차수·체결)을 모든 종목에 적용했을 때, 대안이 기준 물타기보다 <b>더 벌고 동시에 덜 빠진</b> 종목 수입니다. 금액 단위가 다른 종목끼리 비교하기 위해 여기서는 소수점 매수를 허용하고 수익률(%)로만 봅니다. 여러 종목에서 고르게 좋은 대안이 우연이 아닐 가능성이 큽니다.</p>
   </div>
 </div>
 
 <div class="panel" id="detailPanel" hidden>
   <h2>상세</h2>
   <h3 id="dTitle"></h3>
+  <p class="hint" id="dWhat" style="margin:0 0 10px"></p>
   <div class="grid2">
     <div>
       <div class="kv" id="dStats"></div>
-      <p class="hint" id="dNote"></p>
+      <h3 style="margin-top:14px;font-size:13px">하락장 구간별 손익</h3>
+      <div class="tablewrap"><table id="dCrisis"></table></div>
     </div>
     <div>
-      <canvas id="eqChart" width="900" height="380"></canvas>
-      <div class="legend"><span><i style="background:var(--accent)"></i>전략</span><span><i style="background:var(--muted)"></i>매수 후 보유</span><span style="color:var(--up)">▲ 매수</span><span style="color:var(--down)">▼ 매도</span><span>아래: 전략 낙폭</span></div>
+      <canvas id="chart" width="900" height="400"></canvas>
+      <div class="legend"><span><i style="background:var(--muted)"></i>기준 물타기</span><span><i style="background:var(--accent)"></i>이 대안</span><span>회색 띠 = 하락장 구간</span></div>
     </div>
   </div>
-  <details style="margin-top:10px"><summary>매매내역 (최근 60건)</summary><div class="tablewrap" style="margin-top:8px"><table class="trades" id="dTrades"></table></div></details>
 </div>
 
 <div class="panel">
-  <h2>연도별 수익률</h2>
-  <div class="row" style="margin-bottom:10px">
-    <div class="field"><label for="yTick">종목</label><select id="yTick"></select></div>
-    <div class="field"><label for="yMode">표시</label>
-      <select id="yMode">
-        <option value="abs">전략 수익률</option>
-        <option value="diff">보유 대비 차이</option>
-      </select></div>
-  </div>
-  <div class="tablewrap" id="yearly"></div>
-  <p class="hint">전략이 "통했다"는 말은 대개 특정 시기에 통했다는 뜻입니다. 2008 · 2020 · 2022 같은 해에 어느 전략이 버텼는지가 평균보다 많은 것을 알려줍니다.</p>
-</div>
-
-<div class="panel">
-  <h2>전략 카탈로그 · 매개변수</h2>
-  <p class="hint" style="margin:0 0 10px">체크를 끄면 성적표에서 빠집니다. 값을 바꾸면 자동으로 다시 계산합니다. 모든 전략은 처음 자본을 1로 놓고 롱 포지션만 잡으며, 쓰지 않는 자본은 현금(이자 0)으로 둡니다.</p>
+  <h2>대안 목록 · 끄고 켜기 · 숫자 조정</h2>
   <div class="cards" id="cards"></div>
 </div>
 
-<p class="note">자료: 야후 파이낸스 일봉(수정주가 기준, 배당·분할 반영). 시가 체결은 다음 거래일 시가, 종가 체결은 신호 당일 종가입니다. 슬리피지와 이자는 반영하지 않습니다. 과거 결과는 미래 수익을 보장하지 않으며, 특히 여러 전략과 종목을 한꺼번에 비교하면 우연히 좋아 보이는 조합이 반드시 섞여 있습니다.</p>
+<p class="note">엔진은 분할매수 백테스터(index.html)와 같은 코드이며, 기준 물타기 줄의 숫자는 같은 설정이면 그 앱과 같게 나옵니다. 지표 기반 대안(200일선, RSI, ATR, 데드크로스)은 이 페이지에서 엔진에 조건만 덧붙인 것입니다. 일봉 종가 기준이라 장중 체결과 다를 수 있고, 과거 결과가 앞으로를 보장하지는 않습니다.</p>
 </div>
 
 <script>
+/* ===== 백테스트 엔진 (순수 함수) ===== */
+function pad2(x){ x = String(x); return x.length < 2 ? '0' + x : x; }
+function isoDate(d){ return d.toISOString().slice(0, 10); }
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* 예시용 가상 시계열 (실제 종목 데이터가 아님). o = 가상 시가 */
+function sampleData(){
+  var r = mulberry32(20261110), p = 50000, rows = [];
+  var d = new Date(Date.UTC(2021, 0, 4));
+  for (var k = 0; k < 1300; k++){
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d = new Date(d.getTime() + 864e5);
+    var u1 = r() || 1e-9, u2 = r();
+    var z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    var mu = 0.00005 + 0.0014 * Math.sin(k / 170);
+    var prev = p, move = mu + 0.016 * z;
+    p *= Math.exp(move);
+    var c = Math.max(10, Math.round(p / 10) * 10);
+    var op = Math.max(10, Math.round(prev * Math.exp(0.3 * move) / 10) * 10);
+    rows.push({ d: isoDate(d), c: c, a: c, r: c, o: op });
+    d = new Date(d.getTime() + 864e5);
+  }
+  return rows;
+}
+
+function normDate(s){
+  s = String(s == null ? '' : s).replace(/"/g, '').trim();
+  var m;
+  if ((m = s.match(/^(\d{4})\D+(\d{1,2})\D+(\d{1,2})/))) return m[1] + '-' + pad2(m[2]) + '-' + pad2(m[3]);
+  if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) return m[1] + '-' + m[2] + '-' + m[3];
+  if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) return m[3] + '-' + pad2(m[1]) + '-' + pad2(m[2]);
+  var MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  if ((m = s.match(/^([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})/)) && MON[m[1].slice(0, 3).toLowerCase()]) return m[3] + '-' + pad2(MON[m[1].slice(0, 3).toLowerCase()]) + '-' + pad2(m[2]);
+  if ((m = s.match(/^(\d{1,2})\s+([A-Za-z]{3,9})\.?,?\s+(\d{4})/)) && MON[m[2].slice(0, 3).toLowerCase()]) return m[3] + '-' + pad2(MON[m[2].slice(0, 3).toLowerCase()]) + '-' + pad2(m[1]);
+  return null;
+}
+
+function splitLine(l, delim){
+  var out = [], cur = '', q = false;
+  for (var i = 0; i < l.length; i++){
+    var ch = l[i];
+    if (ch === '"'){
+      if (q && l[i + 1] === '"'){ cur += '"'; i++; } else q = !q;
+    } else if (ch === delim && !q){ out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out.map(function(s){ return s.trim(); });
+}
+
+function toNum(s){
+  var v = parseFloat(String(s).replace(/[,\s$₩원]/g, ''));
+  return isFinite(v) ? v : NaN;
+}
+
+/* CSV → {rows:[{d, c, a, r, o}], colName, hasOpen, hasAdj}
+   a = 수정종가(없으면 종가), r = 원종가, o = 원시가(없으면 null), c = a */
+function parseCSV(text){
+  text = String(text).replace(/^﻿/, '').trim();
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
+  if (lines.length < 3) throw new Error('데이터 행이 너무 적습니다. 날짜와 종가 열이 있는 CSV를 올려 주세요.');
+  var best = ',', bestN = 0;
+  [',', '\t', ';'].forEach(function(ch){
+    var n = splitLine(lines[0], ch).length;
+    if (n > bestN){ bestN = n; best = ch; }
+  });
+  var first = splitLine(lines[0], best);
+  var hasHeader = !first.some(function(x){ return normDate(x); });
+  var dateCol = 0, closeCol = -1, adjCol = -1, openCol = -1, lowCol = -1, colName = '';
+  if (hasHeader){
+    var head = first.map(function(s){ return s.toLowerCase(); });
+    var di = head.findIndex(function(h){ return /date|날짜|일자|일시|time/.test(h); });
+    if (di >= 0) dateCol = di;
+    var ai = head.findIndex(function(h){ return /adj|수정/.test(h); });
+    var ci = head.findIndex(function(h){ return /^close|종가|현재가|마감|^price|^종가/.test(h) && !/adj|수정/.test(h); });
+    var oi = head.findIndex(function(h){ return /^open|시가/.test(h) && !/adj|수정/.test(h); });
+    if (ai >= 0){ adjCol = ai; closeCol = ci >= 0 ? ci : ai; colName = first[ai]; }
+    else if (ci >= 0){ closeCol = ci; colName = first[ci]; }
+    openCol = oi;
+    lowCol = head.findIndex(function(h){ return /^low|저가/.test(h) && !/adj|수정/.test(h); });
+  }
+  if (closeCol < 0){
+    closeCol = first.length >= 5 ? 4 : 1;
+    colName = hasHeader ? (first[closeCol] || '') : (closeCol + 1) + '번째 열';
+    if (!hasHeader && first.length >= 5){ openCol = 1; lowCol = 3; }
+  }
+  var rows = [];
+  for (var i = hasHeader ? 1 : 0; i < lines.length; i++){
+    var cells = splitLine(lines[i], best);
+    var d = normDate(cells[dateCol]);
+    var a = toNum(cells[adjCol >= 0 ? adjCol : closeCol]);
+    var r = adjCol >= 0 ? toNum(cells[closeCol]) : a;
+    if (!isFinite(r) || r <= 0) r = a;
+    var op = openCol >= 0 ? toNum(cells[openCol]) : NaN, lw = lowCol >= 0 ? toNum(cells[lowCol]) : NaN;
+    if (d && isFinite(a) && a > 0) rows.push({ d: d, c: a, a: a, r: r, o: (isFinite(op) && op > 0) ? op : null, lw: (isFinite(lw) && lw > 0) ? lw : null });
+  }
+  rows.sort(function(x, y){ return x.d < y.d ? -1 : x.d > y.d ? 1 : 0; });
+  var dedup = [];
+  rows.forEach(function(r){
+    if (dedup.length && dedup[dedup.length - 1].d === r.d) dedup[dedup.length - 1] = r; else dedup.push(r);
+  });
+  if (dedup.length < 20) throw new Error('읽을 수 있는 행이 ' + dedup.length + '개뿐입니다. 열 이름(Date, Close 등)을 확인해 주세요.');
+  return { rows: dedup, colName: colName, hasOpen: dedup.some(function(r){ return r.o != null; }), hasAdj: adjCol >= 0 };
+}
+
+/* 가격 기준 선택: 'adj' 수정종가(배당 반영) / 'raw' 원종가. 시가는 같은 비율로 맞춤 → [{d, c, o}] */
+function basisRows(rows, basis){
+  var raw = basis === 'raw';
+  return rows.map(function(x){
+    var a = x.a != null ? x.a : x.c, r = x.r != null ? x.r : x.c;
+    var o = x.o == null ? null : (raw ? x.o : x.o * a / r);
+    return { d: x.d, c: raw ? r : a, o: o, l: x.lw == null ? null : (raw ? x.lw : x.lw * a / r) };
+  });
+}
+
+function dayDiff(a, b){
+  var pa = a.split('-'), pb = b.split('-');
+  return (Date.UTC(+pb[0], +pb[1] - 1, +pb[2]) - Date.UTC(+pa[0], +pa[1] - 1, +pa[2])) / 864e5;
+}
+
+/* 보유 차수가 lotNo번째가 되는 매수의 금액.
+   tiers=[{from, amount}]: from 차수부터 회당 금액을 amount 로 바꿈 (없으면 기본 amount)
+   (예전 방식 stepFrom/stepMult/stepMode 도 그대로 지원)
+   감액: reduceFrom(0=끔)차수부터 reduceAmt 금액(또는 reducePct%) */
+function lotAmount(o, lotNo){
+  var amt = o.amount, t = o.tiers, i;
+  if (t && t.length){
+    /* 차수 구간: lotNo 이하 중 가장 큰 시작 차수의 금액 (시작 차수 오름차순이 아니어도 동작) */
+    var best = -1;
+    for (i = 0; i < t.length; i++) if (lotNo >= t[i].from && t[i].from > best){ best = t[i].from; amt = t[i].amount; }
+  } else {
+    var from = o.stepFrom || 0, m = o.stepMult || 1;
+    if (from > 0 && lotNo >= from) amt = o.stepMode === 'grow' ? o.amount * Math.pow(m, lotNo - from + 1) : o.amount * m;
+  }
+  var rf = o.reduceFrom || 0;
+  if (rf > 0 && lotNo >= rf){
+    if (o.reduceAmt > 0) amt = o.reduceAmt;
+    else if (o.reducePct > 0) amt = amt * o.reducePct / 100;
+  }
+  return amt;
+}
+
+/*
+ rows = [{d, c, o}]  (basisRows 결과)
+ o = {buyPct, sellPct, buyRef:'lastBuy'|'prevClose'|'peak', sellRef:'avg'|'lot',
+      amount, maxLots, budget(0=무제한), feePct, fractional,
+      stepFrom, stepMult, stepMode:'flat'|'grow', reduceFrom, reducePct,
+      fill:'close'|'open', perDay(하루 최대 매수 차수),
+      stopPct(평단 대비 손절, 0=끔), cooldown(손절 후 쉬는 거래일), maxHoldDays(0=끔),
+      partialPct(100=전량), secondSellPct(분할 매도 뒤 잔량 목표),
+      margin.withdraw(true면 실현이익을 출금해 순자산 기준 잔고를 처음 금액 이하로 유지),
+      buyPts(>0이면 하락률 대신 하락폭(포인트)으로 매수: 기준가보다 buyPts 이상 낮아지면 매수),
+      sellUsd(>0이면 상승률 대신 수익금($)으로 매도: avg=전체 평가손익 합계, lot=차수별 평가손익, 분할매도 미적용),
+      acct, weightPct(계좌 총액 x 최대 비중 = 투입 한도)}
+*/
+function backtest(rows, o){
+  var EPS = 1e-9, fee = (o.feePct || 0) / 100, n = rows.length;
+  var openFill = o.fill === 'open';
+  var perDay = Math.max(1, Math.floor(o.perDay || 1));
+  var stopPct = o.stopPct > 0 ? o.stopPct : 0;
+  var cooldown = Math.max(0, Math.floor(o.cooldown || 0));
+  var maxHold = o.maxHoldDays > 0 ? o.maxHoldDays : 0;
+  var sellUsd = o.sellUsd > 0 ? o.sellUsd : 0;
+  var partPct = (!sellUsd && o.partialPct > 0 && o.partialPct < 100) ? o.partialPct : 100;
+  var second = o.secondSellPct > 0 ? o.secondSellPct : o.sellPct * 2;
+  var budget = o.budget || 0;
+  var pv = o.pv > 0 ? o.pv : 0, lotStep = o.lotStep > 0 ? o.lotStep : 0.01;
+  var mg = (o.margin && o.margin.balance > 0 && o.margin.leverage > 0 && o.margin.stopout > 0) ? o.margin : null;
+  var wd = 0, nLiq = 0, liqDates = [], nMarginBlocked = 0, minLevel = null, minLevelDate = null, maxUsed = 0, maxQty = 0;
+  if (o.acct > 0 && o.weightPct > 0){
+    var capAmt = o.acct * o.weightPct / 100;
+    budget = budget ? Math.min(budget, capAmt) : capAmt;
+  }
+
+  var lots = [], realized = 0, invested = 0, maxInvested = 0, maxLotsHeld = 0;
+  var blockedDays = 0, nBuy = 0, nSell = 0, peak = null;
+  var trades = [], curve = [];
+  var pending = null, partDone = false, cycleStart = null, cooldownUntil = -1, curI = 0;
+  var sellPts = o.sellPts > 0 ? o.sellPts : 0;
+  var nStop = 0, nTime = 0, nSignal = 0;
+  var taxRate = o.taxPct > 0 ? o.taxPct / 100 : 0, taxDed = o.taxDeduction > 0 ? o.taxDeduction : 0, yearGain = 0, taxPaid = 0;
+
+  function stats(){
+    var sh = 0, val = 0, cost = 0;
+    for (var k = 0; k < lots.length; k++){ sh += lots[k].sh; val += lots[k].sh * lots[k].p; cost += lots[k].cost; }
+    return { sh: sh, avg: sh ? val / sh : 0, cost: cost };
+  }
+
+  /* 매도 계획: 신호가 난 날의 종가 기준 */
+  function planSells(c, d){
+    if (!lots.length) return null;
+    var s = stats(), avg = s.avg, nl = lots.length, items = [], k, l;
+    if (o.exitAt && o.exitAt(curI)){
+      for (k = 0; k < nl; k++) items.push({ lot: lots[k], frac: 1 });
+      return { reason: 'signal', single: true, items: items, note: nl + '차수 신호 청산 (평단 ' + avg.toFixed(2) + ')' };
+    }
+    if (stopPct > 0 && c <= avg * (1 - stopPct / 100) + EPS){
+      for (k = 0; k < nl; k++) items.push({ lot: lots[k], frac: 1 });
+      return { reason: 'stop', single: true, items: items, note: nl + '차수 손절 (평단 ' + avg.toFixed(2) + ')' };
+    }
+    if (maxHold > 0 && cycleStart && dayDiff(cycleStart, d) >= maxHold){
+      for (k = 0; k < nl; k++) items.push({ lot: lots[k], frac: 1 });
+      return { reason: 'time', single: true, items: items, note: nl + '차수 기간 청산 (평단 ' + avg.toFixed(2) + ')' };
+    }
+    if (sellUsd && o.sellRef === 'avg'){
+      var gain = s.sh * c - s.cost;
+      if (gain >= sellUsd - EPS){
+        for (k = 0; k < nl; k++) items.push({ lot: lots[k], frac: 1 });
+        return { reason: 'target', single: true, items: items, note: nl + '차수 전량 (평가손익 $' + gain.toFixed(0) + ' ≥ 목표 $' + sellUsd + ')' };
+      }
+      return null;
+    }
+    if (o.sellRef === 'avg'){
+      if (!partDone){
+        if (sellPts ? c >= avg + sellPts - EPS : c >= avg * (1 + o.sellPct / 100) - EPS){
+          for (k = 0; k < nl; k++) items.push({ lot: lots[k], frac: partPct < 100 ? partPct / 100 : 1 });
+          return partPct < 100
+            ? { reason: 'part', single: true, items: items, setPart: true, note: nl + '차수 분할 ' + partPct + '% (평단 ' + avg.toFixed(2) + ')' }
+            : { reason: 'target', single: true, items: items, note: nl + '차수 전량 (평단 ' + avg.toFixed(2) + ')' };
+        }
+      } else if (c >= avg * (1 + second / 100) - EPS){
+        for (k = 0; k < nl; k++) items.push({ lot: lots[k], frac: 1 });
+        return { reason: 'target', single: true, items: items, note: nl + '차수 잔량 전량 (평단 ' + avg.toFixed(2) + ')' };
+      }
+      return null;
+    }
+    for (k = 0; k < nl; k++){
+      l = lots[k];
+      if (!l.part){
+        if (sellUsd ? (l.sh * c - l.cost >= sellUsd - EPS) : sellPts ? (c >= l.p + sellPts - EPS) : (c >= l.p * (1 + o.sellPct / 100) - EPS)){
+          items.push(partPct < 100
+            ? { lot: l, frac: partPct / 100, setPart: true, note: l.n + '차수 매수가 ' + l.p + ' 분할 ' + partPct + '%' }
+            : { lot: l, frac: 1, note: l.n + '차수 매수가 ' + l.p });
+        }
+      } else if (c >= l.p * (1 + second / 100) - EPS){
+        items.push({ lot: l, frac: 1, note: l.n + '차수 매수가 ' + l.p + ' 잔량' });
+      }
+    }
+    return items.length ? { reason: 'target', single: false, items: items } : null;
+  }
+
+  /* 매도 실행: price 에 체결. idx = 체결일 인덱스 */
+  function execSells(plan, idx, price){
+    var d = rows[idx].d, tot = { sh: 0, amt: 0, pnl: 0 }, rows_ = [];
+    plan.items.forEach(function(it){
+      var l = it.lot, shs = it.frac >= 1 ? l.sh : (o.fractional ? l.sh * it.frac : Math.floor(l.sh * it.frac));
+      if (!(shs > 0)) return;
+      var f = Math.min(1, shs / l.sh), costPart = l.cost * f;
+      var proceeds = shs * price * (1 - fee), pnl = proceeds - costPart;
+      realized += pnl; yearGain += pnl; invested -= costPart;
+      l.sh -= shs; l.cost -= costPart;
+      if (it.setPart) l.part = true;
+      tot.sh += shs; tot.amt += shs * price; tot.pnl += pnl;
+      if (!plan.single) rows_.push({ sh: shs, amt: shs * price, pnl: pnl, note: it.note });
+    });
+    if (!tot.sh) return false;
+    if (mg && mg.withdraw){ var balNow = mg.balance + realized - wd; if (balNow > mg.balance) wd += balNow - mg.balance; }   /* 처음 잔고를 넘는 실현이익은 출금 */
+    lots = lots.filter(function(l){ return l.sh > 1e-12; });
+    if (plan.single){
+      nSell++;
+      trades.push({ i: idx, d: d, side: 'S', p: price, sh: tot.sh, amt: tot.amt, pnl: tot.pnl, note: plan.note });
+    } else {
+      rows_.forEach(function(r){
+        nSell++;
+        trades.push({ i: idx, d: d, side: 'S', p: price, sh: r.sh, amt: r.amt, pnl: r.pnl, note: r.note });
+      });
+    }
+    if (plan.setPart) partDone = true;
+    if (plan.reason === 'stop'){ nStop++; cooldownUntil = idx + cooldown - (openFill ? 1 : 0); }
+    if (plan.reason === 'time') nTime++;
+    if (plan.reason === 'signal') nSignal++;
+    if (!lots.length){ partDone = false; cycleStart = null; peak = null; }
+    return true;
+  }
+
+  function doBuy(idx, price, k){
+    var d = rows[idx].d, blocked = false;
+    for (var j = 0; j < k; j++){
+      var lotAmt = lotAmount(o, lots.length + 1);
+      var qty = pv ? Math.floor(lotAmt / lotStep + 1e-9) * lotStep * pv : (o.fractional ? lotAmt / price : Math.floor(lotAmt / price));
+      var need = pv ? qty * price * (1 + fee) : lotAmt * (1 + fee);
+      var capOK = lots.length < o.maxLots;
+      var budgetOK = !budget || invested + need <= budget + EPS;
+      var marginOK = true;
+      if (mg && qty > 0){
+        var sh0 = 0, mv0 = 0;
+        for (var qi = 0; qi < lots.length; qi++){ sh0 += lots[qi].sh; mv0 += lots[qi].sh * price; }
+        marginOK = (mg.balance + realized - wd + mv0 - invested - qty * price * fee) - (sh0 + qty) * price / mg.leverage >= 0;
+        if (capOK && budgetOK && !marginOK) nMarginBlocked++;
+      }
+      if (capOK && budgetOK && marginOK && qty > 0){
+        var bc = qty * price * (1 + fee);
+        if (!lots.length) cycleStart = d;
+        lots.push({ sh: qty, p: price, cost: bc, n: lots.length + 1, part: false });
+        partDone = false;
+        invested += bc; nBuy++; peak = price;
+        if (invested > maxInvested) maxInvested = invested;
+        if (lots.length > maxLotsHeld) maxLotsHeld = lots.length;
+        var totQ = 0; for (var qj = 0; qj < lots.length; qj++) totQ += lots[qj].sh;
+        if (totQ > maxQty) maxQty = totQ;
+        trades.push({ i: idx, d: d, side: 'B', p: price, sh: qty, amt: qty * price, pnl: null, note: lots.length + '차수' });
+      } else { blocked = true; break; }
+    }
+    if (blocked) blockedDays++;
+  }
+
+  for (var i = 0; i < n; i++){
+    var c = rows[i].c, d = rows[i].d, ox = rows[i].o != null ? rows[i].o : c, sold = false, k;
+    curI = i;
+
+    if (pending){                                   /* 전날 신호를 오늘 시가에 체결 */
+      if (pending.type === 'S') execSells(pending.plan, i, ox); else doBuy(i, ox, pending.k);
+      pending = null;
+    }
+
+    /* CFD 증거금: 그날의 최저가로 마진레벨을 확인하고, 스톱아웃 이하면 강제청산 */
+    var mlv = null;
+    if (mg && lots.length){
+      var lowP = rows[i].l != null ? Math.min(rows[i].l, c) : c, Qs = 0, mvL = 0;
+      for (k = 0; k < lots.length; k++){ Qs += lots[k].sh; mvL += lots[k].sh * lowP; }
+      var usedL = Qs * lowP / mg.leverage;
+      mlv = usedL > 0 ? (mg.balance + realized - wd + mvL - invested) / usedL * 100 : null;
+      if (mlv != null && (minLevel == null || mlv < minLevel)){ minLevel = mlv; minLevelDate = d; }
+      if (mlv != null && mlv <= mg.stopout){
+        var sF = mg.stopout / 100, pStar = (invested - mg.balance - realized + wd) / (Qs * (1 - sF / mg.leverage));
+        var pf = (rows[i].o != null && rows[i].o < pStar) ? rows[i].o : pStar;   /* 시가가 이미 더 낮으면 시가에 청산 */
+        if (!(pf > 0)) pf = lowP;
+        var allItems = lots.map(function(l){ return { lot: l, frac: 1 }; });
+        if (execSells({ reason: 'liq', single: true, items: allItems, note: allItems.length + '차수 강제청산 (마진레벨 ' + mlv.toFixed(0) + '%)' }, i, pf)){ nLiq++; liqDates.push(d); sold = true; }
+      }
+    }
+
+    var plan = planSells(c, d);
+    if (plan){
+      sold = true;
+      if (openFill){ if (i < n - 1) pending = { type: 'S', plan: plan }; }
+      else execSells(plan, i, c);
+    }
+
+    if (lots.length) peak = peak == null ? c : Math.max(peak, c); else peak = null;
+
+    if (!sold && i > cooldownUntil){
+      var kk = 0;
+      if (!lots.length) kk = (o.gateStart && !o.gateStart(i)) ? 0 : 1;
+      else if (!(o.gateAdd && !o.gateAdd(i))) {
+        var ref = null, bPts = o.buyPts, bPct = o.buyPct;
+        if (o.spacingAt){ var sp = o.spacingAt(i); if (sp && sp.pts > 0){ bPts = sp.pts; } else if (sp && sp.pct > 0){ bPts = 0; bPct = sp.pct; } }
+        if (o.buyRef === 'lastBuy') ref = lots[lots.length - 1].p;
+        else if (o.buyRef === 'prevClose') ref = i > 0 ? rows[i - 1].c : null;
+        else ref = peak;
+        if (ref != null && (bPts > 0 ? c <= ref - bPts + EPS : c <= ref * (1 - bPct / 100) + EPS)){
+          kk = 1;
+          if (perDay > 1){
+            var steps = bPts > 0 ? Math.floor((ref - c) / bPts + 1e-9) : Math.floor(Math.log(c / ref) / Math.log(1 - bPct / 100) + 1e-9);
+            kk = Math.max(1, Math.min(perDay, steps));
+          }
+        }
+      }
+      if (kk > 0){
+        if (openFill){ if (i < n - 1) pending = { type: 'B', k: kk }; }
+        else doBuy(i, c, kk);
+      }
+    }
+
+    var mv = 0, qS = 0;
+    for (k = 0; k < lots.length; k++){ mv += lots[k].sh * c; qS += lots[k].sh; }
+    if (mg){ var uC = qS * c / mg.leverage; if (uC > maxUsed) maxUsed = uC; }
+    /* 세금: 그 해 마지막 거래일에 (연간 실현손익 - 공제) x 세율을 낸 것으로 계산 (손실은 같은 해 안에서만 상계) */
+    if (taxRate > 0 && (i === n - 1 || rows[i + 1].d.slice(0, 4) !== d.slice(0, 4))){
+      taxPaid += Math.max(0, yearGain - taxDed) * taxRate; yearGain = 0;
+    }
+    curve.push({ d: d, c: c, pnl: realized - taxPaid + (mv - invested), inv: invested, n: lots.length, ml: mlv });
+  }
+
+  var last = curve[n - 1];
+  var base = o.baseCapital > 0 ? o.baseCapital : (maxInvested > 0 ? maxInvested : 1);
+  var bh = curve.map(function(r){ return base * (r.c / rows[0].c - 1); });
+
+  var peakPnl = -Infinity, mdd = 0, minPnl = 0;
+  curve.forEach(function(r){
+    if (r.pnl > peakPnl) peakPnl = r.pnl;
+    if (peakPnl - r.pnl > mdd) mdd = peakPnl - r.pnl;
+    if (r.pnl < minPnl) minPnl = r.pnl;
+  });
+
+  var totalPnl = last.pnl, retPct = totalPnl / base * 100;
+  var years = dayDiff(rows[0].d, rows[n - 1].d) / 365.25;
+  var cagr = (years >= 0.25 && 1 + retPct / 100 > 0) ? (Math.pow(1 + retPct / 100, 1 / years) - 1) * 100 : null;
+  var openSh = 0, openVal = 0;
+  lots.forEach(function(x){ openSh += x.sh; openVal += x.sh * x.p; });
+
+  /* 같은 자금(최대 투입금)을 계좌로 둔 비교: 전략 계좌 = 최대 투입금 + 누적 손익, 단순 보유 = 첫날 전액 매수 */
+  function ddPct(arr){
+    var pk = -Infinity, m = 0;
+    arr.forEach(function(v){ if (v > pk) pk = v; if (pk > 0){ var dd = (pk - v) / pk; if (dd > m) m = dd; } });
+    return m * 100;
+  }
+  var eqS = curve.map(function(r){ return base + r.pnl; });
+  var eqB = curve.map(function(r){ return base * r.c / rows[0].c; });
+  var bhRatio = rows[n - 1].c / rows[0].c;
+  var bhCagr = (years >= 0.25 && bhRatio > 0) ? (Math.pow(bhRatio, 1 / years) - 1) * 100 : null;
+
+  return {
+    trades: trades, curve: curve, bh: bh,
+    totalPnl: totalPnl, realized: realized, taxPaid: taxPaid, unrealized: totalPnl + taxPaid - realized,
+    maxInvested: maxInvested, retPct: retPct, cagr: cagr, years: years,
+    mdd: mdd, mddPct: mdd / base * 100, minPnl: minPnl, minPnlPct: minPnl / base * 100,
+    bhPnl: bh[bh.length - 1], bhPct: (bhRatio - 1) * 100, bhCagr: bhCagr,
+    eqMddPct: ddPct(eqS), bhMddPct: ddPct(eqB), eqEnd: eqS[n - 1], bhEnd: eqB[n - 1],
+    maxQty: maxQty, margin: mg ? { withdrawn: wd, withdraw: !!mg.withdraw, balance: mg.balance, leverage: mg.leverage, stopout: mg.stopout, minLevel: minLevel, minLevelDate: minLevelDate, nLiq: nLiq, liqDates: liqDates, nMarginBlocked: nMarginBlocked, maxUsed: maxUsed } : null,
+    nBuy: nBuy, nSell: nSell, nStop: nStop, nTime: nTime, nSignal: nSignal, blockedDays: blockedDays, maxLotsHeld: maxLotsHeld,
+    openLots: lots.length, openAvg: openSh ? openVal / openSh : null, openInvested: invested,
+    cycles: summarizeCycles(curve, trades, rows)
+  };
+}
+
+/* 사이클 = 보유 0 → 보유 있음 → 다시 0. 완료/진행 중, 최대 차수 분포, 보유 기간 */
+function summarizeCycles(curve, trades, rows){
+  var list = [], cur = null, n = curve.length, i;
+  for (i = 0; i < n; i++){
+    var h = curve[i].n, prev = i ? curve[i - 1].n : 0;
+    if (prev === 0 && h > 0) cur = { s: i, e: null, maxLots: h, buys: 0 };
+    if (cur){
+      if (h > cur.maxLots) cur.maxLots = h;
+      if (prev > 0 && h === 0){ cur.e = i; list.push(cur); cur = null; }
+    }
+  }
+  if (cur) list.push(cur);
+  list.forEach(function(c){
+    var endI = c.e == null ? n - 1 : c.e;
+    c.days = dayDiff(rows[c.s].d, rows[endI].d);
+    c.from = rows[c.s].d; c.to = rows[endI].d;
+  });
+  trades.forEach(function(t){
+    if (t.side !== 'B') return;
+    for (var q = 0; q < list.length; q++){
+      var c = list[q];
+      if (t.i >= c.s && (c.e == null || t.i < c.e)){ c.buys++; break; }
+    }
+  });
+  var done = list.filter(function(c){ return c.e != null; });
+  var open = list.length && list[list.length - 1].e == null ? list[list.length - 1] : null;
+  var dist = {}, sumDays = 0;
+  done.forEach(function(c){ dist[c.maxLots] = (dist[c.maxLots] || 0) + 1; sumDays += c.days; });
+  var longest = null;
+  list.forEach(function(c){ if (!longest || c.days > longest.days) longest = c; });
+  return {
+    total: list.length, done: done.length, open: open ? { from: open.from, days: open.days, lots: curve[n - 1].n, maxLots: open.maxLots, buys: open.buys } : null,
+    dist: dist, avgDays: done.length ? sumDays / done.length : null,
+    longest: longest ? { from: longest.from, to: longest.to, days: longest.days, maxLots: longest.maxLots, open: longest.e == null } : null
+  };
+}
+
+function sweep(rows, o, buyList, sellList){
+  return buyList.map(function(b){
+    return sellList.map(function(s){
+      var r = backtest(rows, Object.assign({}, o, Object.assign(o.buyPts > 0 ? { buyPts: b } : { buyPct: b }, o.sellUsd > 0 ? { sellUsd: s } : { sellPct: s })));
+      return { b: b, s: s, ret: r.retPct, pnl: r.totalPnl, inv: r.maxInvested };
+    });
+  });
+}
+
+/* 순위(내림차순, 동률은 평균 순위) */
+function rankDesc(a){
+  var idx = a.map(function(v, i){ return [v, i]; }).sort(function(x, y){ return y[0] - x[0]; });
+  var r = new Array(a.length), i = 0;
+  while (i < idx.length){
+    var j = i;
+    while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++;
+    for (var k = i; k <= j; k++) r[idx[k][1]] = (i + j) / 2 + 1;
+    i = j + 1;
+  }
+  return r;
+}
+function pearson(x, y){
+  var n = x.length, mx = 0, my = 0, i;
+  for (i = 0; i < n; i++){ mx += x[i]; my += y[i]; }
+  mx /= n; my /= n;
+  var sxy = 0, sxx = 0, syy = 0;
+  for (i = 0; i < n; i++){ sxy += (x[i] - mx) * (y[i] - my); sxx += (x[i] - mx) * (x[i] - mx); syy += (y[i] - my) * (y[i] - my); }
+  return (sxx > 0 && syy > 0) ? sxy / Math.sqrt(sxx * syy) : null;
+}
+
+/* 기간 분할 점검: 앞 구간에서 고른 하락률·상승률 설정이 뒤 구간에서도 통하는지 */
+function walkForward(rows, o, buyList, sellList, frac){
+  var m = Math.floor(rows.length * (frac || 0.5));
+  if (m < 40 || rows.length - m < 40) return null;
+  var A = rows.slice(0, m), B = rows.slice(m);
+  var sa = sweep(A, o, buyList, sellList), sb = sweep(B, o, buyList, sellList);
+  var fa = [].concat.apply([], sa), fb = [].concat.apply([], sb);
+  var ra = fa.map(function(x){ return x.ret; }), rb = fb.map(function(x){ return x.ret; });
+  var ia = ra.indexOf(Math.max.apply(null, ra)), ib = rb.indexOf(Math.max.apply(null, rb));
+  var rankB = rankDesc(rb);
+  var meanA = ra.reduce(function(s, v){ return s + v; }, 0) / ra.length, meanB = rb.reduce(function(s, v){ return s + v; }, 0) / rb.length;
+  var curA = backtest(A, o), curB = backtest(B, o);
+  return {
+    a: { from: A[0].d, to: A[A.length - 1].d, n: A.length }, b: { from: B[0].d, to: B[B.length - 1].d, n: B.length },
+    cells: { a: sa, b: sb }, cellCount: fa.length,
+    bestA: { b: fa[ia].b, s: fa[ia].s, retA: ra[ia], retB: rb[ia], rankB: rankB[ia] },
+    bestB: { b: fb[ib].b, s: fb[ib].s, retB: rb[ib] },
+    corr: pearson(rankDesc(ra), rankB), meanA: meanA, meanB: meanB,
+    cur: { retA: curA.retPct, retB: curB.retPct }
+  };
+}
+
+if (typeof module !== 'undefined') module.exports = {
+  lotAmount: lotAmount, backtest: backtest, sweep: sweep, walkForward: walkForward, parseCSV: parseCSV,
+  basisRows: basisRows, sampleData: sampleData, normDate: normDate, dayDiff: dayDiff
+};
+
+</script>
+<script>
 'use strict';
-/* ================= 유틸 ================= */
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const pct = (x, d = 1) => (x == null || !isFinite(x)) ? '-' : (x * 100).toFixed(d) + '%';
-const spct = (x, d = 1) => (x == null || !isFinite(x)) ? '-' : (x >= 0 ? '+' : '') + (x * 100).toFixed(d) + '%';
 const isKS = t => /\.(KS|KQ)$/i.test(t);
-const LEV = /^(TQQQ|QLD|SOXL|SQQQ|UPRO|SPXL|TECL|122630\.KS|233740\.KS|252670\.KS)$/i;
-
-/* ================= 데이터 ================= */
-let SAVED = [], DATA = {}; /* DATA[ticker] = bars */
-function parseCsv(txt){
-  const lines = txt.split(/\r?\n/).filter(Boolean);
-  const head = lines[0].split(',').map(s => s.trim().toLowerCase());
-  const ix = {
-    d: head.indexOf('date'), o: head.indexOf('open'), h: head.indexOf('high'), l: head.indexOf('low'),
-    c: head.indexOf('close'), a: head.indexOf('adj close')
-  };
-  const out = [];
-  for (let i = 1; i < lines.length; i++){
-    const p = lines[i].split(',');
-    const c = parseFloat(p[ix.c]); if (!(c > 0)) continue;
-    const a = ix.a >= 0 ? parseFloat(p[ix.a]) : c;
-    const f = (a > 0) ? a / c : 1;            /* 수정주가 비율을 시고저에도 적용 */
-    const o = parseFloat(p[ix.o]), h = parseFloat(p[ix.h]), l = parseFloat(p[ix.l]);
-    out.push({ d: p[ix.d], o: (o > 0 ? o : c) * f, h: (h > 0 ? h : c) * f, l: (l > 0 ? l : c) * f, c: c * f });
-  }
-  out.sort((x, y) => x.d < y.d ? -1 : x.d > y.d ? 1 : 0);
-  return out;
-}
-async function loadAll(){
-  const r = await fetch('data/index.json', { cache: 'no-cache' });
-  if (!r.ok) throw new Error('data/index.json 을 찾지 못했습니다.');
-  SAVED = await r.json();
-  await Promise.all(SAVED.map(async e => {
-    try {
-      const t = await fetch('data/' + encodeURIComponent(e.file), { cache: 'no-cache' });
-      if (t.ok) DATA[e.t] = parseCsv(await t.text());
-    } catch (err) { /* 개별 실패는 건너뜀 */ }
-  }));
-  SAVED = SAVED.filter(e => DATA[e.t] && DATA[e.t].length > 260);
-}
-
-/* ================= 지표 (종목별 캐시) ================= */
-function Indicators(bars){
-  const n = bars.length, c = bars.map(b => b.c), cache = {};
-  const key = (k, p) => k + ':' + p;
-  const api = { n, c, bars };
-  api.sma = p => cache[key('sma', p)] || (cache[key('sma', p)] = (() => {
-    const out = new Array(n).fill(null); let s = 0;
-    for (let i = 0; i < n; i++){ s += c[i]; if (i >= p) s -= c[i - p]; if (i >= p - 1) out[i] = s / p; }
-    return out;
-  })());
-  api.rsi = p => cache[key('rsi', p)] || (cache[key('rsi', p)] = (() => {
-    const out = new Array(n).fill(null); let g = 0, l = 0;
-    for (let i = 1; i < n; i++){
-      const ch = c[i] - c[i - 1], up = Math.max(ch, 0), dn = Math.max(-ch, 0);
-      if (i <= p){ g += up / p; l += dn / p; if (i === p) out[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l); }
-      else { g = (g * (p - 1) + up) / p; l = (l * (p - 1) + dn) / p; out[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l); }
-    }
-    return out;
-  })());
-  api.hh = p => cache[key('hh', p)] || (cache[key('hh', p)] = (() => {   /* 직전 p일 최고 종가 (당일 제외) */
-    const out = new Array(n).fill(null);
-    for (let i = p; i < n; i++){ let m = -Infinity; for (let k = i - p; k < i; k++) if (c[k] > m) m = c[k]; out[i] = m; }
-    return out;
-  })());
-  api.ll = p => cache[key('ll', p)] || (cache[key('ll', p)] = (() => {
-    const out = new Array(n).fill(null);
-    for (let i = p; i < n; i++){ let m = Infinity; for (let k = i - p; k < i; k++) if (c[k] < m) m = c[k]; out[i] = m; }
-    return out;
-  })());
-  api.std = p => cache[key('std', p)] || (cache[key('std', p)] = (() => {
-    const out = new Array(n).fill(null), sma = api.sma(p);
-    for (let i = p - 1; i < n; i++){ let s = 0; for (let k = i - p + 1; k <= i; k++){ const d = c[k] - sma[i]; s += d * d; } out[i] = Math.sqrt(s / p); }
-    return out;
-  })());
-  api.monthEnd = cache.me || (cache.me = bars.map((b, i) => i === n - 1 || bars[i + 1].d.slice(0, 7) !== b.d.slice(0, 7)));
-  api.monthStart = cache.ms || (cache.ms = bars.map((b, i) => i === 0 || bars[i - 1].d.slice(0, 7) !== b.d.slice(0, 7)));
-  return api;
-}
-
-/* ================= 전략 카탈로그 =================
-   각 전략: onBar(i, ctx) → 주문 또는 null
-   주문: {side:'buy', frac}  frac = 처음 자본 대비 비율 (1 = 전액, 남은 현금 한도)
-         {side:'sell', frac} frac = 보유 수량 대비 비율 (1 = 전량)
-   ctx: ind(지표), pos{shares,cash,avg,lastBuy,equity}, st(전략 상태), capital=1 */
-const STRATS = [
-  { id: 'hold', name: '매수 후 보유', group: '기준선', base: true,
-    desc: '첫날 전액 매수하고 끝까지 보유합니다. 모든 전략의 비교 기준입니다.', src: '기준선',
-    params: [],
-    onBar(i, x){ if (i === x.start && x.pos.shares === 0) return { side: 'buy', frac: 1 }; return null; } },
-
-  { id: 'dca', name: '정액 적립 (매월)', group: '기준선',
-    desc: '자본을 기간 전체의 개월 수로 나눠 매월 첫 거래일에 같은 금액을 삽니다. 현금이 천천히 투입되므로 상승장에서는 보유보다 낮게 나오지만, 분할 투입 전략의 공정한 비교 대상입니다.', src: '기준선',
-    params: [],
-    init(x){ x.st.months = 0; for (let i = x.start; i <= x.end; i++) if (x.ind.monthStart[i]) x.st.months++; x.st.k = 0; },
-    onBar(i, x){ if (x.ind.monthStart[i] || i === x.start) return { side: 'buy', frac: 1 / Math.max(1, x.st.months) }; return null; } },
-
-  { id: 'avgdown', name: '물타기 (분할매수)', group: '역추세',
-    desc: '첫날 1차수를 사고, 직전 매수가보다 하락률만큼 내리면 다음 차수를 삽니다. 평단 대비 상승률에 닿으면 전량 매도하고 다음 날 새 사이클을 시작합니다. 자본은 최대 차수로 균등 분할합니다. 분할매수 백테스터의 기본 전략입니다.', src: '분할매수 백테스터',
-    params: [{ k: 'drop', l: '하락률 %', v: 5, step: 0.5 }, { k: 'up', l: '상승률 % (평단 대비)', v: 10, step: 0.5 }, { k: 'lots', l: '최대 차수', v: 10, step: 1 }],
-    onBar(i, x, p){
-      const c = x.c[i], pos = x.pos, lotFrac = 1 / p.lots;
-      if (pos.shares === 0) return { side: 'buy', frac: lotFrac };
-      if (c >= pos.avg * (1 + p.up / 100)) return { side: 'sell', frac: 1 };
-      if (pos.lots < p.lots && c <= pos.lastBuy * (1 - p.drop / 100)) return { side: 'buy', frac: lotFrac };
-      return null;
-    } },
-
-  { id: 'grid', name: '격자 매매', group: '역추세',
-    desc: '자본을 칸 수로 나누고 시작할 때 절반을 삽니다. 직전 체결가보다 간격만큼 내리면 한 칸 더 사고, 간격만큼 오르면 한 칸 팝니다. 횡보장에서 칸마다 수익을 쌓고, 한 방향 추세에서는 현금이 바닥나거나 일찍 다 팔게 됩니다.', src: '그리드 트레이딩',
-    params: [{ k: 'step', l: '간격 %', v: 5, step: 0.5 }, { k: 'cells', l: '칸 수', v: 10, step: 1 }],
-    init(x){ x.st.ref = null; },
-    onBar(i, x, p){
-      const c = x.c[i], frac = 1 / p.cells, st = x.st;
-      if (st.ref == null){ st.ref = c; return { side: 'buy', frac: frac * Math.floor(p.cells / 2) }; }
-      if (c <= st.ref * (1 - p.step / 100)){ st.ref = c; return x.pos.cash > 1e-9 ? { side: 'buy', frac } : null; }
-      if (c >= st.ref * (1 + p.step / 100)){ st.ref = c; return x.pos.shares > 0 ? { side: 'sell', frac: Math.min(1, frac / Math.max(1e-12, x.pos.invested)) } : null; }
-      return null;
-    } },
-
-  { id: 'rsi2', name: 'RSI(2) 역추세', group: '역추세',
-    desc: '200일선 위(장기 상승 추세)에서만, 2일 RSI가 기준 아래로 떨어지면(단기 급락) 전액 매수하고 종가가 5일선을 회복하면 전량 매도합니다. 승률이 높고 보유 기간이 짧은 전략으로 미국 지수에서 널리 검증됐습니다.', src: 'Larry Connors, "Short Term Trading Strategies That Work" (2008)',
-    params: [{ k: 'rsi', l: 'RSI 기간', v: 2, step: 1 }, { k: 'buy', l: '매수 기준 (이하)', v: 10, step: 1 }, { k: 'trend', l: '추세선 (일)', v: 200, step: 10 }, { k: 'exit', l: '청산선 (일)', v: 5, step: 1 }],
-    onBar(i, x, p){
-      const c = x.c[i], r = x.ind.rsi(p.rsi)[i], t = x.ind.sma(p.trend)[i], e = x.ind.sma(p.exit)[i];
-      if (r == null || t == null || e == null) return null;
-      if (x.pos.shares === 0){ if (c > t && r <= p.buy) return { side: 'buy', frac: 1 }; }
-      else if (c > e) return { side: 'sell', frac: 1 };
-      return null;
-    } },
-
-  { id: 'rsi14', name: 'RSI(14) 과매도', group: '역추세',
-    desc: '14일 RSI가 과매도 기준 아래로 내려가면 전액 매수하고, 과매수 기준 위로 올라가면 전량 매도합니다. 가장 널리 알려진 지표 매매 규칙입니다. 강한 하락장에서는 RSI가 오래 낮게 머물러 일찍 들어가게 됩니다.', src: 'J. Welles Wilder, "New Concepts in Technical Trading Systems" (1978)',
-    params: [{ k: 'len', l: 'RSI 기간', v: 14, step: 1 }, { k: 'buy', l: '매수 (이하)', v: 30, step: 1 }, { k: 'sell', l: '매도 (이상)', v: 70, step: 1 }],
-    onBar(i, x, p){
-      const r = x.ind.rsi(p.len)[i]; if (r == null) return null;
-      if (x.pos.shares === 0){ if (r <= p.buy) return { side: 'buy', frac: 1 }; }
-      else if (r >= p.sell) return { side: 'sell', frac: 1 };
-      return null;
-    } },
-
-  { id: 'boll', name: '볼린저 밴드 회귀', group: '역추세',
-    desc: '종가가 20일 이동평균 − 2표준편차(하단 밴드) 아래로 마감하면 전액 매수하고, 중심선(20일선) 위로 돌아오면 전량 매도합니다. 변동성에 따라 기준이 움직여 가격 수준이 달라도 의미가 유지됩니다.', src: 'John Bollinger (1980년대)',
-    params: [{ k: 'len', l: '기간', v: 20, step: 1 }, { k: 'k', l: '표준편차 배수', v: 2, step: 0.25 }],
-    onBar(i, x, p){
-      const c = x.c[i], m = x.ind.sma(p.len)[i], s = x.ind.std(p.len)[i]; if (m == null) return null;
-      if (x.pos.shares === 0){ if (c < m - p.k * s) return { side: 'buy', frac: 1 }; }
-      else if (c > m) return { side: 'sell', frac: 1 };
-      return null;
-    } },
-
-  { id: 'gc', name: '골든크로스 50/200', group: '추세추종',
-    desc: '50일선이 200일선 위에 있으면 보유, 아래로 내려가면 현금입니다(골든크로스 매수, 데드크로스 매도). 신호가 늦어 고점·저점에서 10~15% 지난 뒤 움직이지만, 긴 하락장을 피하는 데는 효과가 있습니다.', src: '고전 추세추종',
-    params: [{ k: 'fast', l: '단기선 (일)', v: 50, step: 5 }, { k: 'slow', l: '장기선 (일)', v: 200, step: 10 }],
-    onBar(i, x, p){
-      const f = x.ind.sma(p.fast)[i], s = x.ind.sma(p.slow)[i]; if (f == null || s == null) return null;
-      if (x.pos.shares === 0 && f > s) return { side: 'buy', frac: 1 };
-      if (x.pos.shares > 0 && f < s) return { side: 'sell', frac: 1 };
-      return null;
-    } },
-
-  { id: 'faber', name: '10개월 이동평균 타이밍', group: '추세추종',
-    desc: '매월 마지막 거래일에만 판단합니다. 종가가 10개월(약 200일) 이동평균 위면 보유, 아래면 현금입니다. 월 1회만 보므로 속임수 신호가 적고, 2000년·2008년 같은 긴 하락을 피한 것으로 알려진 자산배분 타이밍 모델입니다.', src: 'Mebane Faber, "A Quantitative Approach to Tactical Asset Allocation" (2007)',
-    params: [{ k: 'len', l: '이동평균 (일)', v: 200, step: 10 }],
-    onBar(i, x, p){
-      if (!x.ind.monthEnd[i]) return null;
-      const m = x.ind.sma(p.len)[i]; if (m == null) return null;
-      const c = x.c[i];
-      if (x.pos.shares === 0 && c > m) return { side: 'buy', frac: 1 };
-      if (x.pos.shares > 0 && c < m) return { side: 'sell', frac: 1 };
-      return null;
-    } },
-
-  { id: 'turtle', name: '터틀 돌파 20/10', group: '추세추종',
-    desc: '종가가 직전 20일 최고가를 넘으면 전액 매수하고, 직전 10일 최저가 아래로 내려가면 전량 매도합니다. 추세의 초입에 올라타 꺾일 때 내리는 돌파 전략의 원형입니다. 횡보장에서는 잦은 속임수로 손실이 쌓입니다.', src: 'Richard Dennis의 터틀 트레이딩 (1983), 시스템 1',
-    params: [{ k: 'entry', l: '진입 돌파 (일)', v: 20, step: 5 }, { k: 'exit', l: '청산 이탈 (일)', v: 10, step: 5 }],
-    onBar(i, x, p){
-      const c = x.c[i], hh = x.ind.hh(p.entry)[i], ll = x.ind.ll(p.exit)[i]; if (hh == null || ll == null) return null;
-      if (x.pos.shares === 0 && c > hh) return { side: 'buy', frac: 1 };
-      if (x.pos.shares > 0 && c < ll) return { side: 'sell', frac: 1 };
-      return null;
-    } },
-
-  { id: 'mom12', name: '절대 모멘텀 12개월', group: '추세추종',
-    desc: '매월 마지막 거래일에 지난 12개월 수익률이 플러스면 보유, 마이너스면 현금입니다. 이동평균 대신 수익률 부호로 추세를 판단하는 방식으로, 듀얼 모멘텀의 절반에 해당합니다.', src: 'Gary Antonacci, "Dual Momentum Investing" (2014)',
-    params: [{ k: 'm', l: '기간 (개월)', v: 12, step: 1 }],
-    onBar(i, x, p){
-      if (!x.ind.monthEnd[i]) return null;
-      const back = Math.round(p.m * 21); if (i - back < 0) return null;
-      const r = x.c[i] / x.c[i - back] - 1;
-      if (x.pos.shares === 0 && r > 0) return { side: 'buy', frac: 1 };
-      if (x.pos.shares > 0 && r <= 0) return { side: 'sell', frac: 1 };
-      return null;
-    } }
+const CRISES = [
+  { n: '2000 닷컴', s: '2000-03-24', e: '2002-10-09' },
+  { n: '2008 금융위기', s: '2007-10-09', e: '2009-03-09' },
+  { n: '2011 유럽', s: '2011-07-22', e: '2011-10-03' },
+  { n: '2018 4분기', s: '2018-09-20', e: '2018-12-24' },
+  { n: '2020년 3월', s: '2020-02-19', e: '2020-03-23' },
+  { n: '2022 하락장', s: '2022-01-03', e: '2022-10-12' }
 ];
+let SAVED = [], FILES = {}, TICK = null, MODE = 'stock', RESULT = null, SEL = null, SORT = 'group', ALL = null;
+const parseNum = s => { const v = parseFloat(String(s).replace(/,/g, '')); return isFinite(v) ? v : NaN; };
+function curOf(t){ return MODE === 'cfd' ? 'USD' : (isKS(t) ? 'KRW' : 'USD'); }
+function money(n, sign){
+  if (n == null || !isFinite(n)) return '-';
+  const cur = curOf(TICK), a = Math.abs(n);
+  const s = cur === 'KRW' ? '₩' + Math.round(a).toLocaleString('ko-KR') : '$' + (a >= 1000 ? Math.round(a).toLocaleString('en-US') : a.toFixed(a >= 100 ? 0 : 1));
+  return (n < 0 ? '-' : (sign && n > 0 ? '+' : '')) + s;
+}
+const pct = (x, d = 1, sign) => (x == null || !isFinite(x)) ? '-' : ((sign && x > 0) ? '+' : '') + x.toFixed(d) + '%';
 
-/* ================= 엔진 ================= */
-function runOne(strat, params, bars, ind, start, end, cfg){
-  const n = bars.length, fee = cfg.fee, tax = cfg.tax, openFill = cfg.openFill;
-  const pos = { shares: 0, cash: 1, avg: 0, lastBuy: 0, lots: 0, invested: 0 };
-  const x = { c: ind.c, ind, pos, st: {}, start, end, capital: 1 };
-  const eq = new Array(end - start + 1), trades = [];
-  let pending = null, expoDays = 0, wins = 0, sells = 0;
-  if (strat.init) strat.init(x);
-  const exec = (o, i, price) => {
-    if (o.side === 'buy'){
-      const amt = Math.min(pos.cash, o.frac * x.capital); if (amt <= 1e-12) return;
-      const sh = amt / (price * (1 + fee));
-      pos.avg = (pos.avg * pos.shares + price * sh) / (pos.shares + sh);
-      pos.shares += sh; pos.cash -= amt; pos.invested += amt; pos.lastBuy = price; pos.lots++;
-      trades.push({ d: bars[i].d, side: 'B', p: price, amt, n: pos.lots });
-    } else {
-      if (pos.shares <= 0) return;
-      const sh = pos.shares * Math.min(1, o.frac); if (sh <= 1e-12) return;
-      const proceeds = sh * price * (1 - fee - tax), cost = sh * pos.avg;
-      const pnl = proceeds - cost;
-      pos.shares -= sh; pos.cash += proceeds; pos.invested = Math.max(0, pos.invested - cost);
-      sells++; if (pnl > 0) wins++;
-      trades.push({ d: bars[i].d, side: 'S', p: price, amt: proceeds, pnl, ret: pnl / cost, n: pos.lots });
-      if (pos.shares < 1e-12){ pos.shares = 0; pos.avg = 0; pos.lots = 0; pos.invested = 0; pos.lastBuy = 0; }
-    }
-  };
-  for (let i = start; i <= end; i++){
-    if (pending){ exec(pending, i, bars[i].o); pending = null; }
-    const o = strat.onBar(i, x, params);
-    if (o){ if (openFill){ if (i < end) pending = o; } else exec(o, i, bars[i].c); }
-    if (pos.shares > 0) expoDays++;
-    eq[i - start] = pos.cash + pos.shares * bars[i].c;
-  }
-  return summarize(eq, bars, start, end, trades, expoDays, wins, sells);
+/* ---------- 데이터 ---------- */
+async function loadIndex(){
+  const r = await fetch('data/index.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('data/index.json 을 찾지 못했습니다.');
+  SAVED = await r.json();
 }
-function summarize(eq, bars, start, end, trades, expoDays, wins, sells){
-  const n = eq.length, days = (Date.parse(bars[end].d) - Date.parse(bars[start].d)) / 864e5;
-  const yrs = Math.max(days / 365.25, 1 / 365.25);
-  const fin = eq[n - 1], total = fin - 1, cagr = Math.pow(Math.max(fin, 1e-9), 1 / yrs) - 1;
-  let peak = eq[0], mdd = 0, ddStart = 0, worstFrom = bars[start].d, worstTo = bars[start].d, rec = null, inDD = false, ddFrom = 0;
-  const dd = new Array(n);
-  for (let i = 0; i < n; i++){
-    if (eq[i] >= peak){ peak = eq[i]; ddFrom = i; }
-    const d = eq[i] / peak - 1; dd[i] = d;
-    if (d < mdd){ mdd = d; worstFrom = bars[start + ddFrom].d; worstTo = bars[start + i].d; }
-  }
-  const mid = Math.floor(n / 2), yrsH = yrs / 2;
-  const h1 = Math.pow(Math.max(eq[mid] / eq[0], 1e-9), 1 / yrsH) - 1, h2 = Math.pow(Math.max(eq[n - 1] / eq[mid], 1e-9), 1 / yrsH) - 1;
-  /* 연도별 */
-  const yearly = {}; let yStartEq = eq[0], yCur = bars[start].d.slice(0, 4);
-  for (let i = 0; i < n; i++){
-    const y = bars[start + i].d.slice(0, 4);
-    if (y !== yCur){ yearly[yCur] = eq[i - 1] / yStartEq - 1; yStartEq = eq[i - 1]; yCur = y; }
-  }
-  yearly[yCur] = eq[n - 1] / yStartEq - 1;
-  return { eq, dd, total, cagr, mdd, worstFrom, worstTo, h1, h2, yearly, trades, expo: expoDays / n, sells, winRate: sells ? wins / sells : null, calmar: mdd < 0 ? cagr / -mdd : null, yrs };
-}
-
-/* ================= 설정 상태 ================= */
-const PARAMS = {}, ON = {}, TICKON = {};
-STRATS.forEach(s => { PARAMS[s.id] = {}; s.params.forEach(p => PARAMS[s.id][p.k] = p.v); ON[s.id] = true; });
-function saveState(){ try { localStorage.setItem('sv.state.v1', JSON.stringify({ PARAMS, ON, TICKON, ui: { period: $('period').value, fill: $('fill').value, cost: $('cost').value, metric: $('metric').value, from: $('from').value, to: $('to').value, fee: $('fee').value, tax: $('tax').value } })); } catch (e) {} }
-function restoreState(){
-  try {
-    const s = JSON.parse(localStorage.getItem('sv.state.v1') || 'null'); if (!s) return;
-    Object.keys(s.PARAMS || {}).forEach(id => { if (PARAMS[id]) Object.assign(PARAMS[id], s.PARAMS[id]); });
-    Object.assign(ON, s.ON || {}); Object.assign(TICKON, s.TICKON || {});
-    const u = s.ui || {}; ['period', 'fill', 'cost', 'metric', 'from', 'to', 'fee', 'tax'].forEach(k => { if (u[k] != null && $(k)) $(k).value = u[k]; });
-  } catch (e) {}
-}
-
-/* ================= 계산 (비동기 분할) ================= */
-let RESULTS = {}, RANGE = {}, RUNID = 0, SEL = null, VIEW = 'byTick', RK_T = null, RK_S = 'avgdown';
-function costFor(t){
-  const m = $('cost').value;
-  if (m === 'zero') return { fee: 0, tax: 0 };
-  if (m === 'custom') return { fee: (parseFloat($('fee').value) || 0) / 100, tax: (parseFloat($('tax').value) || 0) / 100 };
-  return isKS(t) ? { fee: 0.00015, tax: 0.0018 } : { fee: 0.0005, tax: 0 };
-}
-function rangeFor(ticks){
-  const mode = $('period').value, out = {};
-  let from = null, to = null;
-  if (mode === 'common'){ ticks.forEach(t => { const b = DATA[t]; if (!from || b[0].d > from) from = b[0].d; if (!to || b[b.length - 1].d < to) to = b[b.length - 1].d; }); }
-  else if (mode === 'y10' || mode === 'y5'){ const y = mode === 'y10' ? 10 : 5; let last = null; ticks.forEach(t => { const b = DATA[t]; if (!last || b[b.length - 1].d > last) last = b[b.length - 1].d; }); const d = new Date(last); d.setFullYear(d.getFullYear() - y); from = d.toISOString().slice(0, 10); }
-  else if (mode === 'custom'){ from = $('from').value || null; to = $('to').value || null; }
-  ticks.forEach(t => {
-    const b = DATA[t]; let s = 0, e = b.length - 1;
-    if (from) while (s < e && b[s].d < from) s++;
-    if (to) while (e > s && b[e].d > to) e--;
-    out[t] = { start: s, end: e };
-  });
-  return out;
-}
-async function compute(){
-  const my = ++RUNID;
-  const ticks = SAVED.map(e => e.t).filter(t => TICKON[t] !== false);
-  const strats = STRATS.filter(s => ON[s.id] || s.base);
-  $('err').textContent = '';
-  if (!ticks.length){ $('board').innerHTML = '<p class="hint" style="padding:14px">종목을 하나 이상 고르세요.</p>'; return; }
-  RANGE = rangeFor(ticks);
-  const bad = ticks.filter(t => RANGE[t].end - RANGE[t].start < 250);
-  if (bad.length) $('err').textContent = '기간이 1년 미만이라 제외: ' + bad.join(', ');
-  const use = ticks.filter(t => RANGE[t].end - RANGE[t].start >= 250);
-  const jobs = []; use.forEach(t => strats.forEach(s => jobs.push([t, s])));
-  const prog = $('prog'); prog.style.display = 'block'; prog.firstElementChild.style.width = '0%';
-  const res = {}, IND = {}; const openFill = $('fill').value === 'open';
-  const mode = $('period').value;
-  let k = 0;
-  for (const [t, s] of jobs){
-    if (my !== RUNID) return;
-    IND[t] = IND[t] || Indicators(DATA[t]);
-    const r = RANGE[t], cfg = Object.assign({ openFill }, costFor(t));
-    try { (res[t] = res[t] || {})[s.id] = runOne(s, PARAMS[s.id], DATA[t], IND[t], r.start, r.end, cfg); }
-    catch (e) { console.error(s.id, t, e); }
-    k++; if (k % 3 === 0){ prog.firstElementChild.style.width = (k / jobs.length * 100).toFixed(0) + '%'; await new Promise(r => setTimeout(r, 0)); }
-  }
-  if (my !== RUNID) return;
-  prog.style.display = 'none'; RESULTS = res;
-  const f = use.map(t => DATA[t][RANGE[t].start].d), l = use.map(t => DATA[t][RANGE[t].end].d);
-  $('periodHint').textContent = mode === 'full' ? '종목별 전체 기간 (시작일이 달라 서로 직접 비교는 피하세요)' : '계산 구간 ' + f.sort()[0] + ' ~ ' + l.sort().pop() + (mode === 'common' ? ' · 가장 늦게 시작한 종목에 맞춘 공통 구간' : '');
-  renderBoard(use, strats); renderRank(); renderYearly(); if (SEL && res[SEL.t] && res[SEL.t][SEL.s]) renderDetail(SEL.t, SEL.s); else { $('detailPanel').hidden = true; }
-  saveState();
-}
-
-/* ================= 성적표 ================= */
-function metricVal(r, hold, m){
-  switch (m){
-    case 'cagr': return r.cagr; case 'total': return r.total; case 'excess': return r.cagr - hold.cagr;
-    case 'mdd': return r.mdd; case 'calmar': return r.calmar; case 'h2': return r.h2; case 'expo': return r.expo;
-  }
-}
-function fmtMetric(v, m){ if (v == null || !isFinite(v)) return '-'; if (m === 'calmar') return v.toFixed(2); if (m === 'excess') return spct(v); if (m === 'expo') return pct(v, 0); return pct(v); }
-function cellColor(exc){
-  if (exc == null || !isFinite(exc)) return '';
-  const a = Math.min(0.55, Math.abs(exc) / 0.12 * 0.55);
-  return exc >= 0 ? `background:color-mix(in srgb, var(--good) ${(a * 100).toFixed(0)}%, transparent)` : `background:color-mix(in srgb, var(--bad) ${(a * 100).toFixed(0)}%, transparent)`;
+async function rowsFor(t){
+  if (FILES[t]) return FILES[t];
+  const e = SAVED.find(x => x.t === t);
+  const r = await fetch('data/' + encodeURIComponent(e.file), { cache: 'no-cache' }); if (!r.ok) throw new Error(e.file + ' 을 찾지 못했습니다.');
+  const p = parseCSV(await r.text()); FILES[t] = p.rows; return p.rows;
 }
 function tickLabel(t){ const e = SAVED.find(x => x.t === t); return e && e.name ? e.name : t.toUpperCase(); }
-function renderBoard(ticks, strats){
-  const m = $('metric').value;
-  let h = '<table><thead><tr><th class="l">전략 \\ 종목</th>' + ticks.map(t => '<th title="' + esc(t) + '">' + esc(tickLabel(t)) + (LEV.test(t) ? '<span class="pill">lev</span>' : '') + '</th>').join('') + '<th>평균</th><th>보유 이김</th></tr></thead><tbody>';
-  strats.forEach(s => {
-    let sum = 0, cnt = 0, beat = 0;
-    h += '<tr' + (s.base ? ' class="base"' : '') + '><td class="l" title="' + esc(s.name) + '">' + esc(s.name) + '</td>';
-    ticks.forEach(t => {
-      const r = RESULTS[t] && RESULTS[t][s.id], hold = RESULTS[t] && RESULTS[t].hold;
-      if (!r || !hold){ h += '<td class="cell">-</td>'; return; }
-      const v = metricVal(r, hold, m), exc = r.cagr - hold.cagr;
-      if (v != null && isFinite(v)){ sum += v; cnt++; } if (exc > 0) beat++;
-      const sel = SEL && SEL.t === t && SEL.s === s.id ? ' sel' : '';
-      h += '<td class="cell' + (s.base ? ' base' : '') + sel + '" data-t="' + esc(t) + '" data-s="' + s.id + '" style="' + (s.base ? '' : cellColor(exc)) + '"><span class="m">' + fmtMetric(v, m) + '</span><span class="s">낙폭 ' + pct(r.mdd, 0) + '</span></td>';
-    });
-    h += '<td class="mono">' + (cnt ? fmtMetric(sum / cnt, m) : '-') + '</td><td class="mono">' + (s.base ? '-' : beat + '/' + ticks.length) + '</td></tr>';
+
+/* ---------- 지표 ---------- */
+function indicators(rows){
+  const n = rows.length, c = rows.map(r => r.c), cache = {};
+  const sma = p => cache['s' + p] || (cache['s' + p] = (() => { const o = new Array(n).fill(null); let s = 0; for (let i = 0; i < n; i++){ s += c[i]; if (i >= p) s -= c[i - p]; if (i >= p - 1) o[i] = s / p; } return o; })());
+  const rsi = p => cache['r' + p] || (cache['r' + p] = (() => { const o = new Array(n).fill(null); let g = 0, l = 0; for (let i = 1; i < n; i++){ const ch = c[i] - c[i - 1], u = Math.max(ch, 0), d = Math.max(-ch, 0); if (i <= p){ g += u / p; l += d / p; if (i === p) o[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l); } else { g = (g * (p - 1) + u) / p; l = (l * (p - 1) + d) / p; o[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l); } } return o; })());
+  const atr = p => cache['a' + p] || (cache['a' + p] = (() => { /* 고가가 없어 |종가 변화|와 (전일 종가 − 저가) 중 큰 값으로 근사 */
+    const o = new Array(n).fill(null); let s = 0; const tr = new Array(n).fill(0);
+    for (let i = 1; i < n; i++){ const a = Math.abs(c[i] - c[i - 1]), b = rows[i].l != null ? Math.max(0, c[i - 1] - rows[i].l) : 0; tr[i] = Math.max(a, b); s += tr[i]; if (i > p) s -= tr[i - p]; if (i >= p) o[i] = s / p; }
+    return o; })());
+  return { sma, rsi, atr, c, n };
+}
+
+/* ---------- 대안 정의 ----------
+   apply(o, x): o = 기준 옵션 복사본, x = {ind, rows, base}. 바꾼 o 를 돌려줌 */
+const VARIANTS = [
+  { id: 'trend200', g: '언제 시작하나', name: '200일선 아래에선 새 사이클 시작 안 함', what: '보유가 0일 때 종가가 200일 이동평균보다 낮으면 1차수를 사지 않고 기다립니다. 이미 들어간 사이클은 그대로 진행합니다.',
+    p: [{ k: 'len', l: '이동평균 (일)', v: 200 }], apply(o, x, p){ const s = x.ind.sma(p.len); o.gateStart = i => s[i] == null || x.rows[i].c > s[i]; return o; } },
+  { id: 'rsiAdd', g: '언제 사나', name: '추가 매수는 RSI(14) 이하일 때만', what: '2차수부터는 하락 조건에 더해 RSI(14)가 기준 이하일 때만 삽니다. 완만한 하락에서는 차수를 아끼고 급락에서만 물탑니다.',
+    p: [{ k: 'th', l: 'RSI 기준', v: 40 }], apply(o, x, p){ const r = x.ind.rsi(14); o.gateAdd = i => r[i] == null || r[i] <= p.th; return o; } },
+  { id: 'wide', g: '언제 사나', name: '하락 간격 2배', what: '하락률(또는 하락폭)을 2배로 넓힙니다. 차수가 천천히 쌓여 깊은 하락에서 버티는 힘이 커지지만, 얕은 조정은 놓칩니다.',
+    p: [{ k: 'm', l: '배수', v: 2 }], apply(o, x, p){ if (o.buyPts > 0) o.buyPts *= p.m; else o.buyPct = Math.min(99, o.buyPct * p.m); return o; } },
+  { id: 'tight', g: '언제 사나', name: '하락 간격 절반', what: '하락률(또는 하락폭)을 절반으로 좁힙니다. 조정마다 더 자주 사고, 차수가 빨리 찹니다.',
+    p: [], apply(o){ if (o.buyPts > 0) o.buyPts /= 2; else o.buyPct /= 2; return o; } },
+  { id: 'atr', g: '언제 사나', name: '간격을 변동성(ATR)에 맞춤', what: '하락 간격을 고정값 대신 최근 14일 평균 변동폭 × 배수로 정합니다. 조용할 때는 촘촘히, 급변할 때는 넓게 삽니다.',
+    p: [{ k: 'k', l: 'ATR 배수', v: 1.5 }], apply(o, x, p){ const a = x.ind.atr(14); const pts = o.buyPts > 0; o.spacingAt = i => a[i] == null ? null : (pts ? { pts: a[i] * p.k } : { pct: a[i] / x.rows[i].c * 100 * p.k }); return o; } },
+  { id: 'peak', g: '언제 사나', name: '하락 기준을 "직전 매수 이후 고점"으로', what: '직전 매수가 대신, 마지막 매수 뒤에 찍은 고점에서 하락률만큼 내려오면 삽니다. 반등 뒤 재하락에 더 일찍 반응합니다.',
+    p: [], apply(o){ o.buyRef = 'peak'; return o; }, skipIf: o => o.buyRef === 'peak' },
+  { id: 'lot', g: '언제 파나', name: '차수별 익절', what: '평단 회복을 기다리지 않고, 각 차수가 자기 매수가 대비 목표에 닿으면 그 차수만 팝니다. 아래 차수가 먼저 빠져나갑니다.',
+    p: [], apply(o){ o.sellRef = 'lot'; return o; }, skipIf: o => o.sellRef === 'lot' },
+  { id: 'tgtHalf', g: '언제 파나', name: '목표 절반', what: '매도 목표(상승률 또는 수익금)를 절반으로 낮춰 더 자주 실현합니다.',
+    p: [], apply(o){ if (o.sellUsd > 0) o.sellUsd /= 2; else if (o.sellPts > 0) o.sellPts /= 2; else o.sellPct /= 2; return o; } },
+  { id: 'tgtDouble', g: '언제 파나', name: '목표 2배', what: '매도 목표를 2배로 올려 한 번에 크게 먹되, 그만큼 오래 들고 갑니다.',
+    p: [], apply(o){ if (o.sellUsd > 0) o.sellUsd *= 2; else if (o.sellPts > 0) o.sellPts *= 2; else o.sellPct *= 2; return o; } },
+  { id: 'dead', g: '언제 파나', name: '데드크로스면 전량 정리', what: '보유 중에 50일선이 200일선 아래로 내려가는 날 손익과 무관하게 전부 팝니다. 긴 하락장에 깊이 물리는 것을 막는 대신 손실을 확정합니다.',
+    p: [{ k: 'f', l: '단기선', v: 50 }, { k: 's', l: '장기선', v: 200 }], apply(o, x, p){ const f = x.ind.sma(p.f), s = x.ind.sma(p.s); o.exitAt = i => i > 0 && f[i] != null && s[i] != null && f[i - 1] != null && s[i - 1] != null && f[i - 1] >= s[i - 1] && f[i] < s[i]; return o; } },
+  { id: 'time', g: '언제 파나', name: '오래 물리면 정리', what: '사이클이 시작된 지 N일이 지나도 못 팔았으면 그날 전부 정리하고 새로 시작합니다.',
+    p: [{ k: 'd', l: '기준 (일)', v: 180 }], apply(o, x, p){ o.maxHoldDays = p.d; return o; } },
+  { id: 'stop', g: '언제 파나', name: '평단 대비 손절', what: '종가가 평단보다 N% 아래면 전부 손절하고 며칠 쉰 뒤 다시 시작합니다.',
+    p: [{ k: 's', l: '손절 %', v: 20 }, { k: 'c', l: '쉬는 날', v: 20 }], apply(o, x, p){ o.stopPct = p.s; o.cooldown = p.c; return o; } },
+  { id: 'partial', g: '언제 파나', name: '절반만 팔고 나머지는 2배 목표', what: '첫 목표에서 보유의 절반만 팔고, 남은 절반은 목표의 2배에서 팝니다.',
+    p: [{ k: 'p', l: '첫 매도 %', v: 50 }], apply(o, x, p){ if (o.sellUsd > 0) return null; o.partialPct = p.p; o.secondSellPct = o.sellPct * 2; return o; } },
+  { id: 'martin', g: '돈을 어떻게 나누나', name: '아래 차수일수록 크게 (4차수 2배, 7차수 4배)', what: '회당 금액을 4차수부터 2배, 7차수부터 4배로 키웁니다. 평단이 빨리 내려와 회복은 빠르지만 깊은 하락에서 투입금이 급증합니다.',
+    p: [{ k: 'a', l: '2배 시작 차수', v: 4 }, { k: 'b', l: '4배 시작 차수', v: 7 }], apply(o, x, p){ o.tiers = [{ from: p.a, amount: o.amount * 2 }, { from: p.b, amount: o.amount * 4 }]; o.reduceFrom = 0; return o; } },
+  { id: 'reduce', g: '돈을 어떻게 나누나', name: '6차수부터 절반으로 줄임', what: '깊이 들어갈수록 회당 금액을 절반으로 줄여 투입 상한을 낮춥니다. 회복은 느려지지만 최악의 손실이 작아집니다.',
+    p: [{ k: 'f', l: '시작 차수', v: 6 }], apply(o, x, p){ o.tiers = []; o.reduceFrom = p.f; o.reduceAmt = o.amount / 2; return o; } },
+  { id: 'grid', g: '구조를 바꿈', name: '격자형: 차수마다 하락 간격만큼 오르면 그 차수 매도', what: '매수 간격과 매도 간격을 같게 두고 차수별로 사고팝니다. 평단 회복을 기다리지 않아 횡보장에서 자주 실현하지만, 추세 상승에서는 일찍 다 팔립니다.',
+    p: [], apply(o){ o.sellRef = 'lot'; o.sellUsd = 0; o.partialPct = 100; if (o.buyPts > 0){ o.sellPts = o.buyPts; } else { o.sellPts = 0; o.sellPct = o.buyPct; } return o; } },
+  { id: 'trendLot', g: '구조를 바꿈', name: '조합: 200일선 필터 + 차수별 익절', what: '200일선 아래에선 새로 시작하지 않고, 팔 때는 차수별로 팝니다. 위의 두 대안을 합친 것입니다.',
+    p: [], apply(o, x){ const s = x.ind.sma(200); o.gateStart = i => s[i] == null || x.rows[i].c > s[i]; o.sellRef = 'lot'; return o; } }
+];
+const VP = {}, VON = {};
+VARIANTS.forEach(v => { VP[v.id] = {}; v.p.forEach(p => VP[v.id][p.k] = p.v); VON[v.id] = true; });
+
+/* ---------- 설정 → 엔진 옵션 (index.html 의 paramsFrom 과 같은 규칙) ---------- */
+const FIELDS = ['buyRef', 'buyMode', 'buyPct', 'buyPts', 'amount', 'maxLots', 'sellRef', 'sellMode', 'sellPct', 'sellUsd', 'fill', 'fee', 'cfdBal', 'cfdLev', 'cfdSo', 'cfdPv', 'cfdWd', 'perDay', 'budget', 'stop', 'cool', 'hold', 'part', 'second', 'redFrom', 'redAmt', 'basis', 'frac', 'start', 'end'];
+let TIERS = [];
+function getVals(){ const v = {}; FIELDS.forEach(id => { const el = $(id); v[id] = el.type === 'checkbox' ? el.checked : el.value; }); v.cfd = MODE === 'cfd'; v.tiers = TIERS; return v; }
+function baseOptions(v){
+  const cfd = v.cfd;
+  const o = {
+    buyPct: parseFloat(v.buyPct), sellPct: parseFloat(v.sellPct), buyRef: v.buyRef, sellRef: v.sellRef,
+    sellUsd: (cfd && v.sellMode === 'usd') ? (parseFloat(v.sellUsd) || 0) : 0,
+    buyPts: (cfd && v.buyMode === 'pts') ? (parseFloat(v.buyPts) || 0) : 0,
+    amount: parseNum(v.amount), maxLots: parseInt(v.maxLots, 10),
+    budget: parseNum(v.budget) || 0, feePct: parseFloat(v.fee) || 0, fractional: !!v.frac,
+    tiers: (v.tiers || []).map(t => ({ from: parseInt(t.from, 10), amount: parseNum(t.amt) })).filter(t => isFinite(t.from) && t.amount > 0),
+    fill: v.fill, perDay: parseInt(v.perDay, 10) || 1,
+    stopPct: parseFloat(v.stop) || 0, cooldown: parseInt(v.cool, 10) || 0, maxHoldDays: parseInt(v.hold, 10) || 0,
+    partialPct: parseFloat(v.part) || 100, secondSellPct: parseFloat(v.second) || 0,
+    reduceFrom: parseInt(v.redFrom, 10) || 0, reduceAmt: parseNum(v.redAmt) || 0,
+    taxPct: 0, taxDeduction: 0
+  };
+  if (cfd){
+    o.pv = parseFloat(v.cfdPv) || 0; o.lotStep = 0.01; o.fractional = true;
+    if (!(o.pv > 0)) return { error: '1랏 · 1포인트당 금액을 입력해 주세요.' };
+    const bal = parseNum(v.cfdBal), lev = parseFloat(v.cfdLev), so = parseFloat(v.cfdSo);
+    if (!(bal > 0 && lev >= 1 && so > 0)) return { error: 'CFD 모드에서는 잔고, 레버리지, 스톱아웃을 모두 입력해야 청산을 계산합니다.' };
+    o.margin = { balance: bal, leverage: lev, stopout: so, withdraw: !!v.cfdWd }; o.baseCapital = bal;
+  }
+  if ((!(o.buyPts > 0) && !(o.buyPct > 0)) || (!(o.sellUsd > 0) && !(o.sellPct > 0))) return { error: '하락과 상승 조건은 0보다 커야 합니다.' };
+  if (!(o.amount > 0)) return { error: '회당 매수 금액(또는 랏 수)을 입력해 주세요.' };
+  if (!(o.maxLots >= 1)) return { error: '최대 차수는 1 이상이어야 합니다.' };
+  return { o, basis: v.basis === 'raw' ? 'raw' : 'adj' };
+}
+
+/* ---------- 계산 ---------- */
+function sliceRows(rows, s, e){ return rows.filter(r => (!s || r.d >= s) && (!e || r.d <= e)); }
+function crisisPnl(res, rows){
+  const idx = {}; rows.forEach((r, i) => idx[r.d] = i);
+  const firstIdxOnOrAfter = d => { let lo = 0, hi = rows.length - 1, ans = -1; while (lo <= hi){ const m = (lo + hi) >> 1; if (rows[m].d >= d){ ans = m; hi = m - 1; } else lo = m + 1; } return ans; };
+  const lastIdxOnOrBefore = d => { let lo = 0, hi = rows.length - 1, ans = -1; while (lo <= hi){ const m = (lo + hi) >> 1; if (rows[m].d <= d){ ans = m; lo = m + 1; } else hi = m - 1; } return ans; };
+  return CRISES.map(c => {
+    const a = firstIdxOnOrAfter(c.s), b = lastIdxOnOrBefore(c.e);
+    if (a < 0 || b < 0 || b <= a || rows[a].d > c.e || rows[b].d < c.s) return null;
+    const p0 = a > 0 ? res.curve[a - 1].pnl : 0, p1 = res.curve[b].pnl;
+    let worst = 0; for (let i = a; i <= b; i++){ const d = res.curve[i].pnl - p0; if (d < worst) worst = d; }
+    const liq = res.margin ? res.margin.liqDates.filter(d => d >= c.s && d <= c.e).length : 0;
+    const maxN = Math.max.apply(null, res.curve.slice(a, b + 1).map(r => r.n));
+    return { n: c.n, s: c.s, e: c.e, pnl: p1 - p0, worst, liq, maxN, a, b };
+  }).filter(Boolean);
+}
+function runSet(rows, o, basis, ind, onlyIds){
+  const rb = basisRows(rows, basis), x = { ind, rows: rb, base: o };
+  const out = [];
+  const base = backtest(rb, o); base.crisis = crisisPnl(base, rb);
+  VARIANTS.forEach(v => {
+    if (onlyIds && onlyIds.indexOf(v.id) < 0) return;
+    if (!VON[v.id]) return;
+    if (v.skipIf && v.skipIf(o)) return;
+    const oo = v.apply(JSON.parse(JSON.stringify(o)), x, VP[v.id]); if (!oo) return;
+    if (o.margin) oo.margin = Object.assign({}, o.margin);
+    const r = backtest(rb, oo); r.crisis = crisisPnl(r, rb);
+    out.push({ v, r, o: oo });
   });
+  return { base, list: out, rows: rb };
+}
+let RUN = 0;
+async function compute(){
+  const my = ++RUN; $('err').textContent = '';
+  if (!TICK) return;
+  const pr = baseOptions(getVals()); if (pr.error){ $('err').textContent = pr.error; return; }
+  let rows;
+  try { rows = await rowsFor(TICK); } catch (e) { $('err').textContent = e.message; return; }
+  if (my !== RUN) return;
+  const sl = sliceRows(rows, $('start').value, $('end').value);
+  if (sl.length < 60){ $('err').textContent = '선택한 기간의 데이터가 너무 적습니다.'; return; }
+  $('prog').style.display = 'block'; $('prog').firstElementChild.style.width = '30%';
+  await new Promise(r => setTimeout(r, 0));
+  try { RESULT = runSet(sl, pr.o, pr.basis, indicators(basisRows(sl, pr.basis))); }
+  catch (e) { console.error(e); $('err').textContent = '계산 오류: ' + e.message; $('prog').style.display = 'none'; return; }
+  $('prog').style.display = 'none';
+  renderBoard(); if (SEL) renderDetail(SEL); else $('detailPanel').hidden = true;
+  saveState();
+  if (!$('tabAll').hidden) computeAll();
+}
+
+/* ---------- 판정 ---------- */
+function judge(b, r){
+  const base = r.margin ? r.margin.balance : Math.max(b.maxInvested, r.maxInvested, 1);
+  const dP = (r.totalPnl - b.totalPnl) / base * 100, dM = r.mddPct - b.mddPct;
+  const liqWorse = r.margin && r.margin.nLiq > b.margin.nLiq, liqBetter = r.margin && r.margin.nLiq < b.margin.nLiq;
+  const eps = 0.5;
+  if (liqWorse) return { t: '청산 늘어남', c: 'b', s: -2 };
+  if (dP >= -eps && dM <= eps && (dP > eps || dM < -eps || liqBetter)) return { t: '물타기보다 나음', c: 'g', s: 2 };
+  if (dP > eps && dM > eps) return { t: '더 벌지만 더 빠짐', c: 'w', s: 1 };
+  if (dP < -eps && dM < -eps) return { t: '덜 벌지만 덜 빠짐', c: 'w', s: 0 };
+  if (Math.abs(dP) <= eps && Math.abs(dM) <= eps) return { t: '차이 거의 없음', c: 'm', s: 0 };
+  return { t: '물타기보다 못함', c: 'b', s: -1 };
+}
+function stuck(r){ return r.cycles && r.cycles.longest ? r.cycles.longest.days : 0; }
+function worstCrisis(r){ let w = null; r.crisis.forEach(c => { if (!w || c.pnl < w.pnl) w = c; }); return w; }
+
+/* ---------- 표 ---------- */
+function cellNum(val, diff, fmt, betterWhenLower){
+  const good = diff == null ? null : (betterWhenLower ? diff < 0 : diff > 0), zero = diff != null && Math.abs(diff) < 1e-9;
+  return '<td><span class="m">' + fmt(val) + '</span>' + (diff == null ? '' : '<span class="d ' + (zero ? 'mute' : good ? 'good' : 'bad') + '">' + (zero ? '같음' : fmt(diff, true)) + '</span>') + '</td>';
+}
+function renderBoard(){
+  if (!RESULT) return;
+  const b = RESULT.base, cfd = !!b.margin, baseCap = r => cfd ? r.margin.balance : (r.maxInvested || 1);
+  const fmtM = (v, s) => money(v, s), fmtP = (v, s) => pct(v, 1, s), fmtD = (v, s) => (s && v > 0 ? '+' : '') + Math.round(v) + '일', fmtN = (v, s) => (s && v > 0 ? '+' : '') + v + '회';
+  const wc = worstCrisis(b);
+  const items = RESULT.list.map(x => Object.assign({}, x, { j: judge(b, x.r) }));
+  const better = items.filter(x => x.j.s === 2), worse = items.filter(x => x.j.s < 0);
+  const rng = RESULT.rows[0].d + ' ~ ' + RESULT.rows[RESULT.rows.length - 1].d;
+  $('sum').innerHTML = '<b>' + esc(tickLabel(TICK)) + '</b> · ' + rng + ' · 기준 물타기: 순손익 <b>' + money(b.totalPnl, true) + '</b> (' + (cfd ? '잔고' : '최대 투입금 ' + money(b.maxInvested)) + ' 대비 ' + pct(b.retPct, 1, true) + '), 최대 낙폭 <b>' + pct(b.mddPct) + '</b>, 가장 오래 물림 <b>' + stuck(b) + '일</b>' + (cfd ? ', 강제청산 <b>' + b.margin.nLiq + '회</b>' : '') + '<br>' +
+    (better.length ? '대안 ' + items.length + '개 중 <b>' + better.length + '개</b>가 더 벌면서 덜 빠졌습니다: ' + better.sort((p, q) => q.r.totalPnl - p.r.totalPnl).slice(0, 3).map(x => '<b style="font-family:var(--font)">' + esc(x.v.name) + '</b>').join(', ') + (better.length > 3 ? ' 등' : '') + '.' : '더 벌면서 동시에 덜 빠진 대안은 <b>없습니다</b>. 수익과 위험 중 하나를 내주는 대안만 있습니다.') +
+    (worse.length ? ' ' + worse.length + '개는 물타기보다 못했습니다.' : '');
+  let list = items.slice();
+  if (SORT === 'pnl') list.sort((p, q) => q.r.totalPnl - p.r.totalPnl);
+  else if (SORT === 'mdd') list.sort((p, q) => p.r.mddPct - q.r.mddPct);
+  else if (SORT === 'stuck') list.sort((p, q) => stuck(p.r) - stuck(q.r));
+  const head = '<tr><th class="l">전략</th><th>순손익</th><th>수익률<br><span style="font-weight:400">' + (cfd ? '잔고 대비' : '최대 투입금 대비') + '</span></th><th>최대 낙폭</th><th>가장 오래<br>물린 기간</th><th>완료<br>사이클</th><th>최악의 하락장<br><span style="font-weight:400">' + (wc ? esc(wc.n) : '-') + '</span></th>' + (cfd ? '<th>최저<br>마진레벨</th><th>강제<br>청산</th>' : '<th>최대 투입금</th>') + '<th>판정</th></tr>';
+  const rowHtml = (name, what, r, isBase, id) => {
+    const d = isBase ? null : r, wr = wc ? r.crisis.find(c => c.n === wc.n) : null, wb = wc;
+    return '<tr class="' + (isBase ? 'base' : 'v' + (SEL === id ? ' sel' : '')) + '" data-id="' + (id || '') + '"><td class="l"><span class="nm">' + esc(name) + '</span>' + (what ? '<span class="what">' + esc(what) + '</span>' : '') + '</td>' +
+      cellNum(r.totalPnl, d && r.totalPnl - b.totalPnl, fmtM) +
+      cellNum(r.retPct, d && r.retPct - b.retPct, fmtP) +
+      cellNum(r.mddPct, d && r.mddPct - b.mddPct, fmtP, true) +
+      cellNum(stuck(r), d && stuck(r) - stuck(b), fmtD, true) +
+      cellNum(r.cycles.done, d && r.cycles.done - b.cycles.done, fmtN) +
+      (wr ? cellNum(wr.pnl, d && wr.pnl - wb.pnl, fmtM) : '<td>-</td>') +
+      (cfd ? cellNum(r.margin.minLevel == null ? 0 : r.margin.minLevel, d && (r.margin.minLevel || 0) - (b.margin.minLevel || 0), (v, s) => (s && v > 0 ? '+' : '') + Math.round(v).toLocaleString('en-US') + '%') + cellNum(r.margin.nLiq, d && r.margin.nLiq - b.margin.nLiq, fmtN, true)
+           : cellNum(r.maxInvested, d && r.maxInvested - b.maxInvested, fmtM, true)) +
+      '<td>' + (isBase ? '<span class="verdict m">기준</span>' : '<span class="verdict ' + judge(b, r).c + '">' + judge(b, r).t + '</span>') + '</td></tr>';
+  };
+  let h = '<table><thead>' + head + '</thead><tbody>' + rowHtml('기준 물타기 (지금 설정)', '', b, true, '');
+  let g = null;
+  list.forEach(x => { if (SORT === 'group' && x.v.g !== g){ g = x.v.g; h += '<tr class="grp"><td colspan="' + (cfd ? 10 : 9) + '">' + esc(g) + '</td></tr>'; } h += rowHtml(x.v.name, x.v.what.split('.')[0] + '.', x.r, false, x.v.id); });
   h += '</tbody></table>';
   $('board').innerHTML = h;
-  $('board').querySelectorAll('td.cell[data-t]').forEach(td => td.addEventListener('click', () => { SEL = { t: td.dataset.t, s: td.dataset.s }; renderBoard(ticks, strats); renderRank(); renderDetail(SEL.t, SEL.s); $('detailPanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+  $('board').querySelectorAll('tr.v').forEach(tr => tr.addEventListener('click', () => { SEL = tr.dataset.id; renderBoard(); renderDetail(SEL); $('detailPanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
 }
 
-/* ================= 순위 보기 ================= */
-function verdict(r, hold, isBase){
-  if (isBase) return ['기준선', ''];
-  const ex = r.cagr - hold.cagr;
-  const t = '최악일 때 ' + pct(r.mdd, 0) + '까지 빠짐 (그냥 보유는 ' + pct(hold.mdd, 0) + ')';
-  if (ex > 0.005 && r.h2 >= hold.h2) return ['통했음 — 앞 절반과 뒤 절반 모두 보유를 이김. ' + t, 'good'];
-  if (ex > 0.005) return ['반만 통했음 — 앞 시기엔 좋았지만 최근 절반에선 보유보다 못함. ' + t, ''];
-  if (r.mdd > hold.mdd + 0.1 && r.cagr > 0) return ['돈은 덜 벌었지만 떨어질 때 훨씬 덜 떨어짐. ' + t, ''];
-  return ['안 통했음 — 그냥 들고 있는 게 나았음. ' + t, 'bad'];
-}
-function won(x){ /* 100으로 시작했을 때의 최종 금액 */ const v = x * 100; return v >= 1000 ? Math.round(v).toLocaleString('ko-KR') : v.toFixed(v >= 100 ? 0 : 1); }
-function rankItem(no, title, sub, r, hold, isBase, data){
-  const fin = r.eq[r.eq.length - 1], hf = hold.eq[hold.eq.length - 1];
-  const scale = Math.max(fin, hf, 1.2);
-  const w = Math.min(100, fin / scale * 100), hx = Math.min(100, hf / scale * 100), one = Math.min(100, 1 / scale * 100);
-  const ddw = Math.min(100, Math.abs(r.mdd) * 100), hdd = Math.min(100, Math.abs(hold.mdd) * 100);
-  const vd = verdict(r, hold, isBase);
-  const cls = isBase ? 'm' : (fin >= hf ? 'g' : 'b');
-  const ratio = fin / hf;
-  let cmp = '';
-  if (!isBase){
-    if (ratio >= 1.02) cmp = '그냥 들고 있었을 때(' + won(hf) + ')보다 <b class="good">' + (ratio >= 2 ? ratio.toFixed(1) + '배' : '+' + ((ratio - 1) * 100).toFixed(0) + '%') + '</b> 더 남음';
-    else if (ratio <= 0.98) cmp = '그냥 들고 있었을 때(' + won(hf) + ')의 <b class="bad">' + (ratio * 100).toFixed(0) + '%</b>만 남음';
-    else cmp = '그냥 들고 있었을 때(' + won(hf) + ')와 비슷함';
-  }
-  return '<div class="rk' + (isBase ? ' base' : '') + (SEL && SEL.t === data.t && SEL.s === data.s ? ' sel' : '') + '" data-t="' + esc(data.t) + '" data-s="' + data.s + '">' +
-    '<div class="no">' + (isBase ? '<span style="font-size:11px;font-family:var(--font)">기준</span>' : no) + '</div>' +
-    '<div class="top"><span class="nm">' + esc(title) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span></div>' +
-    '<div class="money">100으로 시작 → <b class="' + (fin >= 1 ? (isBase ? '' : (fin >= hf ? 'good' : '')) : 'bad') + '">' + won(fin) + '</b><span>(' + r.yrs.toFixed(0) + '년, 연 ' + spct(r.cagr) + ')</span></div>' +
-    (cmp ? '<div class="cmp">' + cmp + '</div>' : '') +
-    '<div class="bars">' +
-      '<span>최종 금액</span><div class="bar"><i class="' + cls + '" style="width:' + w + '%"></i><em style="left:' + one + '%;opacity:.3"></em><em style="left:' + hx + '%"></em></div><span class="v">' + won(fin) + '</span>' +
-      '<span>최악일 때</span><div class="bar"><i class="m" style="width:' + ddw + '%;opacity:.5"></i><em style="left:' + hdd + '%"></em></div><span class="v">' + pct(r.mdd, 0) + '</span>' +
-    '</div>' +
-    '<div class="verdict ' + vd[1] + '">' + vd[0] + '</div>' +
-  '</div>';
-}
-function bindRank(host){
-  host.querySelectorAll('.rk').forEach(el => el.addEventListener('click', () => { SEL = { t: el.dataset.t, s: el.dataset.s }; renderRank(); renderDetail(SEL.t, SEL.s); $('detailPanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
-}
-function renderRank(){
-  const ticks = Object.keys(RESULTS), m = $('metric').value, strats = STRATS.filter(s => ON[s.id] || s.base);
-  if (!ticks.length){ $('rank').innerHTML = ''; $('rank2').innerHTML = ''; return; }
-  if (!RK_T || ticks.indexOf(RK_T) < 0) RK_T = ticks.indexOf('^NDX') >= 0 ? '^NDX' : ticks[0];
-  if (!STRATS.find(s => s.id === RK_S && (ON[s.id] || s.base))) RK_S = strats.find(s => !s.base) ? strats.find(s => !s.base).id : 'hold';
-  $('rkTick').innerHTML = ticks.map(t => '<span class="chip' + (t === RK_T ? ' on' : '') + (LEV.test(t) ? ' lev' : '') + '" data-t="' + esc(t) + '">' + esc(tickLabel(t)) + '</span>').join('');
-  $('rkTick').querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => { RK_T = ch.dataset.t; renderRank(); }));
-  $('rkStrat').innerHTML = strats.filter(s => !s.base || s.id === 'dca').map(s => '<span class="chip' + (s.id === RK_S ? ' on' : '') + '" data-s="' + s.id + '">' + esc(s.name) + '</span>').join('');
-  $('rkStrat').querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => { RK_S = ch.dataset.s; renderRank(); }));
-  /* 종목별 */
-  const R = RESULTS[RK_T], hold = R.hold, rg = RANGE[RK_T], b = DATA[RK_T];
-  const list = strats.filter(s => R[s.id]).map(s => ({ s, r: R[s.id], v: R[s.id].eq[R[s.id].eq.length - 1] })).filter(x => !x.s.base);
-  list.sort((a, c) => c.v - a.v);
-  const beat = list.filter(x => x.r.cagr > hold.cagr).length, best = list[0];
-  const hf = hold.eq[hold.eq.length - 1];
-  $('rkSum').innerHTML = '<b>' + esc(tickLabel(RK_T)) + '</b>을(를) ' + b[rg.start].d.slice(0, 4) + '년부터 ' + b[rg.end].d.slice(0, 4) + '년까지 <b>그냥 들고 있었다면 100 → ' + won(hf) + '</b> (중간에 최대 ' + pct(hold.mdd, 0) + ' 빠짐).<br>' +
-    '같은 돈으로 전략을 썼다면 아래와 같습니다. ' + (beat ? '전략 ' + list.length + '개 중 <b>' + beat + '개</b>가 보유보다 많이 남겼고, 1위는 <b>' + esc(best.s.name) + '</b>입니다.' : '전략 ' + list.length + '개 중 보유보다 많이 남긴 것이 <b>없습니다</b>.');
-  let h = rankItem(0, '매수 후 보유', '기준선', hold, hold, true, { t: RK_T, s: 'hold' });
-  list.forEach((x, i) => { h += rankItem(i + 1, x.s.name, x.s.group, x.r, hold, false, { t: RK_T, s: x.s.id }); });
-  $('rank').innerHTML = h; bindRank($('rank'));
-  /* 전략별 */
-  const st = STRATS.find(s => s.id === RK_S);
-  const l2 = ticks.filter(t => RESULTS[t][RK_S]).map(t => ({ t, r: RESULTS[t][RK_S], hold: RESULTS[t].hold })).map(x => Object.assign(x, { v: x.r.eq[x.r.eq.length - 1] / x.hold.eq[x.hold.eq.length - 1] }));
-  l2.sort((a, c) => c.v - a.v);
-  const beat2 = l2.filter(x => x.r.cagr > x.hold.cagr).length;
-  $('rkSum2').innerHTML = '<b>' + esc(st.name) + '</b> 전략은 종목 ' + l2.length + '개 중 <b>' + beat2 + '개</b>에서 그냥 들고 있는 것보다 많이 남겼습니다.' + (beat2 >= l2.length * 0.7 ? ' 여러 시장에서 고르게 통한 편입니다.' : beat2 <= l2.length * 0.3 ? ' 대부분의 종목에서 그냥 보유만 못했습니다.' : ' 종목에 따라 갈립니다.');
-  let h2 = '';
-  l2.forEach((x, i) => { h2 += rankItem(i + 1, tickLabel(x.t), (LEV.test(x.t) ? '레버리지 · ' : '') + '보유 ' + spct(x.hold.cagr), x.r, x.hold, false, { t: x.t, s: RK_S }); });
-  $('rank2').innerHTML = h2; bindRank($('rank2'));
-}
-function setView(v){
-  VIEW = v;
-  document.querySelectorAll('.viewtabs button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
-  $('vByTick').hidden = v !== 'byTick'; $('vByStrat').hidden = v !== 'byStrat'; $('vMatrix').hidden = v !== 'matrix';
-  try { localStorage.setItem('sv.view', v); } catch (e) {}
-}
-document.querySelectorAll('.viewtabs button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
-try { setView(localStorage.getItem('sv.view') || 'byTick'); } catch (e) {}
-
-/* ================= 상세 ================= */
-function renderDetail(t, sid){
-  const r = RESULTS[t][sid], hold = RESULTS[t].hold, s = STRATS.find(x => x.id === sid), b = DATA[t], rg = RANGE[t];
+/* ---------- 상세 ---------- */
+function renderDetail(id){
+  const x = RESULT.list.find(y => y.v.id === id); if (!x){ $('detailPanel').hidden = true; return; }
+  const b = RESULT.base, r = x.r, cfd = !!b.margin;
   $('detailPanel').hidden = false;
-  $('dTitle').textContent = s.name + ' · ' + tickLabel(t) + ' (' + b[rg.start].d + ' ~ ' + b[rg.end].d + ', ' + r.yrs.toFixed(1) + '년)';
-  const kv = [
-    ['총 수익률', spct(r.total), '보유 ' + spct(hold.total)],
-    ['연환산 수익률', spct(r.cagr), '보유 ' + spct(hold.cagr) + ' · 초과 ' + spct(r.cagr - hold.cagr)],
-    ['최대 낙폭', pct(r.mdd), r.worstFrom + ' ~ ' + r.worstTo + ' · 보유 ' + pct(hold.mdd)],
-    ['연환산 ÷ 낙폭', r.calmar == null ? '-' : r.calmar.toFixed(2), '보유 ' + (hold.calmar == null ? '-' : hold.calmar.toFixed(2))],
-    ['전반 / 후반 연환산', spct(r.h1) + ' / ' + spct(r.h2), '보유 ' + spct(hold.h1) + ' / ' + spct(hold.h2)],
-    ['시장 노출', pct(r.expo, 0), '보유 중이었던 거래일 비율'],
-    ['매도 횟수 · 승률', r.sells + '회 · ' + (r.winRate == null ? '-' : pct(r.winRate, 0)), '매도 시점의 평단 대비 손익 기준'],
+  $('dTitle').textContent = x.v.name + ' · ' + tickLabel(TICK);
+  $('dWhat').textContent = '바꾼 것: ' + x.v.what;
+  const rows = [
+    ['순손익', money(b.totalPnl, true), money(r.totalPnl, true)],
+    ['수익률 (' + (cfd ? '잔고' : '최대 투입금') + ' 대비)', pct(b.retPct, 1, true), pct(r.retPct, 1, true)],
+    ['연환산', b.cagr == null ? '-' : pct(b.cagr, 1, true), r.cagr == null ? '-' : pct(r.cagr, 1, true)],
+    ['최대 낙폭', pct(b.mddPct), pct(r.mddPct)],
+    ['최대 투입금', money(b.maxInvested), money(r.maxInvested)],
+    ['가장 오래 물림', stuck(b) + '일', stuck(r) + '일'],
+    ['완료 사이클 / 매수 / 매도', b.cycles.done + ' / ' + b.nBuy + ' / ' + b.nSell, r.cycles.done + ' / ' + r.nBuy + ' / ' + r.nSell],
+    ['종료 시점 보유', b.openLots + '차수', r.openLots + '차수'],
   ];
-  $('dStats').innerHTML = kv.map(k => '<div class="k">' + k[0] + '</div><div class="v">' + k[1] + '</div><div class="sub">' + esc(k[2]) + '</div>').join('');
-  const ex = r.cagr - hold.cagr;
-  let note = '';
-  if (sid === 'hold') note = '기준선입니다.';
-  else if (ex > 0 && r.h2 > hold.h2) note = '전체와 후반 모두 보유를 앞섰습니다. 매개변수를 조금 바꿔도 유지되는지 확인해 보세요.';
-  else if (ex > 0) note = '전체로는 보유를 앞섰지만 후반 절반에서는 뒤졌습니다. 앞 시기에 통한 전략일 수 있습니다.';
-  else if (r.mdd > hold.mdd + 0.1) note = '수익은 보유보다 낮지만 낙폭을 크게 줄였습니다. 위험 조정 기준(연환산 ÷ 낙폭)으로 보세요.';
-  else note = '이 종목·기간에서는 보유보다 나은 점을 찾기 어렵습니다.';
-  $('dNote').textContent = note;
-  drawEquity($('eqChart'), b, rg, r, hold);
-  const tr = r.trades.slice(-60).reverse();
-  $('dTrades').innerHTML = '<thead><tr><th>날짜</th><th>구분</th><th>가격</th><th>금액(자본=1)</th><th>손익</th><th>수익률</th></tr></thead><tbody>' + tr.map(x => '<tr><td class="mono">' + x.d + '</td><td>' + (x.side === 'B' ? '매수' : '매도') + '</td><td class="mono">' + x.p.toFixed(2) + '</td><td class="mono">' + x.amt.toFixed(3) + '</td><td class="mono ' + (x.pnl > 0 ? 'good' : x.pnl < 0 ? 'bad' : '') + '">' + (x.pnl == null ? '' : (x.pnl >= 0 ? '+' : '') + x.pnl.toFixed(3)) + '</td><td class="mono">' + (x.ret == null ? '' : spct(x.ret)) + '</td></tr>').join('') + '</tbody>';
+  if (cfd) rows.push(['최저 마진레벨', Math.round(b.margin.minLevel || 0) + '%', Math.round(r.margin.minLevel || 0) + '%'], ['강제청산', b.margin.nLiq + '회', r.margin.nLiq + '회']);
+  if (r.nStop || r.nTime || r.nSignal) rows.push(['손절 / 기간 / 신호 청산', (b.nStop || 0) + ' / ' + (b.nTime || 0) + ' / ' + (b.nSignal || 0), r.nStop + ' / ' + r.nTime + ' / ' + r.nSignal]);
+  $('dStats').innerHTML = '<span class="h"></span><span class="h">기준 물타기</span><span class="h">이 대안</span>' + rows.map(k => '<span>' + k[0] + '</span><span class="v mute">' + k[1] + '</span><span class="v">' + k[2] + '</span>').join('');
+  const cr = b.crisis;
+  $('dCrisis').innerHTML = cr.length ? '<thead><tr><th class="l">구간</th><th>기준 손익</th><th>대안 손익</th><th>구간 중 최악</th><th>최대 차수</th>' + (cfd ? '<th>청산</th>' : '') + '</tr></thead><tbody>' + cr.map(c => { const d = r.crisis.find(z => z.n === c.n); return '<tr><td class="l">' + esc(c.n) + '<br><span class="mute" style="font-size:11px">' + c.s + ' ~ ' + c.e + '</span></td><td class="mute" style="font-family:var(--mono)">' + money(c.pnl, true) + '</td><td style="font-family:var(--mono)" class="' + (d.pnl > c.pnl + 1e-9 ? 'good' : d.pnl < c.pnl - 1e-9 ? 'bad' : '') + '">' + money(d.pnl, true) + '</td><td style="font-family:var(--mono)">' + money(d.worst) + '<span class="mute"> (기준 ' + money(c.worst) + ')</span></td><td style="font-family:var(--mono)">' + d.maxN + '<span class="mute"> (' + c.maxN + ')</span></td>' + (cfd ? '<td style="font-family:var(--mono)">' + d.liq + '<span class="mute"> (' + c.liq + ')</span></td>' : '') + '</tr>'; }).join('') + '</tbody>' : '<tbody><tr><td class="mute">선택한 기간에 포함된 하락장 구간이 없습니다.</td></tr></tbody>';
+  drawChart($('chart'), RESULT.rows, b, r);
 }
 function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
-function drawEquity(cv, bars, rg, r, hold){
-  const W = cv.width, H = cv.height, ctx = cv.getContext('2d'), dpr = 1;
-  ctx.clearRect(0, 0, W, H);
-  const padL = 56, padR = 12, padT = 14, eqH = Math.round(H * 0.68), ddTop = eqH + 26, ddH = H - ddTop - 12;
-  const n = r.eq.length, xs = i => padL + (W - padL - padR) * i / Math.max(1, n - 1);
-  const all = r.eq.concat(hold.eq); let lo = Math.min.apply(null, all), hi = Math.max.apply(null, all); lo = Math.max(lo, 1e-6);
-  const ly = v => padT + (eqH - padT) * (1 - (Math.log(v) - Math.log(lo)) / Math.max(1e-9, Math.log(hi) - Math.log(lo)));
-  ctx.font = '11px ' + cssVar('--mono'); ctx.fillStyle = cssVar('--muted'); ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1;
-  /* 격자 (로그) */
-  const ticks = []; let v = Math.pow(10, Math.floor(Math.log10(lo)));
-  while (v <= hi * 1.01){ [1, 2, 5].forEach(m => { const t = v * m; if (t >= lo && t <= hi) ticks.push(t); }); v *= 10; }
-  if (ticks.length < 3){ ticks.length = 0; for (let k = 0; k <= 4; k++) ticks.push(lo * Math.pow(hi / lo, k / 4)); }
-  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-  ticks.forEach(t => { const y = ly(t); ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke(); ctx.fillText('×' + (t >= 10 ? t.toFixed(0) : t.toFixed(t >= 1 ? 1 : 2)), padL - 6, y); });
-  /* x축 연도 */
-  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  let lastY = '';
-  for (let i = 0; i < n; i++){ const y = bars[rg.start + i].d.slice(0, 4); if (y !== lastY){ lastY = y; if (n > 2500 && (+y) % 5) continue; if (n > 800 && n <= 2500 && (+y) % 2) continue; const x = xs(i); ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, eqH); ctx.stroke(); ctx.fillText(y, x, eqH + 4); } }
-  /* 보유선 */
-  const line = (arr, color, w) => { ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w; for (let i = 0; i < n; i++){ const x = xs(i), y = ly(Math.max(arr[i], lo)); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); };
-  line(hold.eq, cssVar('--muted'), 1.2); line(r.eq, cssVar('--accent'), 1.8);
-  /* 매매 표시 */
-  const idx = {}; for (let i = 0; i < n; i++) idx[bars[rg.start + i].d] = i;
-  const maxMark = 400, step = Math.max(1, Math.ceil(r.trades.length / maxMark));
-  r.trades.forEach((t, k) => { if (k % step) return; const i = idx[t.d]; if (i == null) return; const x = xs(i), y = ly(Math.max(r.eq[i], lo)); ctx.fillStyle = t.side === 'B' ? cssVar('--up') : cssVar('--down'); ctx.beginPath(); if (t.side === 'B'){ ctx.moveTo(x, y + 9); ctx.lineTo(x - 4, y + 15); ctx.lineTo(x + 4, y + 15); } else { ctx.moveTo(x, y - 9); ctx.lineTo(x - 4, y - 15); ctx.lineTo(x + 4, y - 15); } ctx.closePath(); ctx.fill(); });
-  /* 낙폭 */
-  ctx.fillStyle = cssVar('--muted'); ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.fillText('낙폭', padL - 6, ddTop + 12);
-  const mdd = Math.min(r.mdd, hold.mdd, -0.05), dy = d => ddTop + ddH * (d / mdd);
-  ctx.strokeStyle = cssVar('--line'); ctx.beginPath(); ctx.moveTo(padL, ddTop); ctx.lineTo(W - padR, ddTop); ctx.stroke();
-  ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillText(pct(mdd, 0), padL - 6, ddTop + ddH);
-  ctx.beginPath(); ctx.moveTo(xs(0), ddTop); for (let i = 0; i < n; i++) ctx.lineTo(xs(i), dy(r.dd[i])); ctx.lineTo(xs(n - 1), ddTop); ctx.closePath();
-  ctx.fillStyle = 'color-mix(in srgb, ' + cssVar('--accent') + ' 35%, transparent)'; ctx.fill();
-  ctx.beginPath(); ctx.strokeStyle = cssVar('--muted'); ctx.lineWidth = 1; for (let i = 0; i < n; i++){ const x = xs(i), y = dy(hold.dd[i]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke();
+function drawChart(cv, rows, b, r){
+  const W = cv.width, H = cv.height, ctx = cv.getContext('2d'); ctx.clearRect(0, 0, W, H);
+  const padL = 70, padR = 10, padT = 12, padB = 24, n = rows.length;
+  const xs = i => padL + (W - padL - padR) * i / Math.max(1, n - 1);
+  const all = b.curve.map(c => c.pnl).concat(r.curve.map(c => c.pnl), [0]);
+  let lo = Math.min.apply(null, all), hi = Math.max.apply(null, all); if (hi === lo){ hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
+  const ys = v => padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo));
+  ctx.font = '11px ' + cssVar('--mono'); ctx.fillStyle = cssVar('--muted');
+  /* 하락장 띠 */
+  b.crisis.forEach(c => { ctx.fillStyle = 'color-mix(in srgb, ' + cssVar('--muted') + ' 14%, transparent)'; ctx.fillRect(xs(c.a), padT, Math.max(2, xs(c.b) - xs(c.a)), H - padT - padB); });
+  /* 격자 */
+  ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = cssVar('--muted');
+  const step = niceStep((hi - lo) / 5);
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step){ const y = ys(v); ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke(); ctx.fillText(money(v), padL - 6, y); }
+  ctx.strokeStyle = cssVar('--fg'); ctx.globalAlpha = .35; ctx.beginPath(); ctx.moveTo(padL, ys(0)); ctx.lineTo(W - padR, ys(0)); ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; let ly = '';
+  for (let i = 0; i < n; i++){ const y = rows[i].d.slice(0, 4); if (y !== ly){ ly = y; if (n > 2500 && (+y) % 5) continue; if (n > 900 && n <= 2500 && (+y) % 2) continue; ctx.fillText(y, xs(i), H - padB + 5); } }
+  const line = (cur, color, w) => { ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w; for (let i = 0; i < n; i++){ const x = xs(i), y = ys(cur[i].pnl); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); };
+  line(b.curve, cssVar('--muted'), 1.4); line(r.curve, cssVar('--accent'), 2);
+  /* 대안의 손절·신호 청산 표시 */
+  ctx.fillStyle = cssVar('--up');
+  r.trades.forEach(t => { if (t.side === 'S' && /손절|청산/.test(t.note || '')){ const x = xs(t.i), y = ys(r.curve[t.i].pnl); ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill(); } });
+}
+function niceStep(x){ const p = Math.pow(10, Math.floor(Math.log10(x || 1))), m = x / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; }
+
+/* ---------- 모든 종목 요약 ---------- */
+async function computeAll(){
+  const pr = baseOptions(getVals()); if (pr.error){ $('sumAll').textContent = pr.error; return; }
+  const ticks = SAVED.map(e => e.t), o0 = JSON.parse(JSON.stringify(pr.o)); o0.fractional = true; delete o0.margin; delete o0.baseCapital; o0.pv = 0;
+  $('prog').style.display = 'block';
+  const per = {}; let k = 0;
+  for (const t of ticks){
+    let rows; try { rows = await rowsFor(t); } catch (e) { continue; }
+    const sl = sliceRows(rows, $('start').value, $('end').value); if (sl.length < 250) continue;
+    const o = JSON.parse(JSON.stringify(o0));
+    if (isKS(t) !== (curOf(t) === 'KRW')) {}
+    /* 금액 단위: 한국 종목은 원화 → 가격 규모에 맞춰 1주 이상 살 수 있도록 회당 금액을 최근 종가의 10배로 정규화 (소수점 매수라 비율 결과는 금액과 무관) */
+    o.amount = sl[sl.length - 1].c * 10; o.tiers = []; o.reduceAmt = o.reduceFrom ? o.amount / 2 : 0; o.budget = 0;
+    if (o.sellUsd > 0){ o.sellUsd = 0; o.sellPct = parseFloat($('sellPct').value) || 10; }
+    if (o.buyPts > 0){ o.buyPts = 0; o.buyPct = parseFloat($('buyPct').value) || 5; }
+    try { per[t] = runSet(sl, o, pr.basis, indicators(basisRows(sl, pr.basis))); } catch (e) { console.error(t, e); }
+    k++; $('prog').firstElementChild.style.width = (k / ticks.length * 100).toFixed(0) + '%'; await new Promise(r => setTimeout(r, 0));
+  }
+  $('prog').style.display = 'none'; ALL = per;
+  const tl = Object.keys(per);
+  const rowsV = VARIANTS.filter(v => VON[v.id]).map(v => {
+    const cells = tl.map(t => { const x = per[t].list.find(y => y.v.id === v.id); if (!x) return null; const j = judge(per[t].base, x.r); return { j, dP: x.r.retPct - per[t].base.retPct, dM: x.r.mddPct - per[t].base.mddPct }; });
+    const n2 = cells.filter(c => c && c.j.s === 2).length, nb = cells.filter(c => c && c.j.s < 0).length, avgP = cells.filter(Boolean).reduce((s, c) => s + c.dP, 0) / Math.max(1, cells.filter(Boolean).length), avgM = cells.filter(Boolean).reduce((s, c) => s + c.dM, 0) / Math.max(1, cells.filter(Boolean).length);
+    return { v, cells, n2, nb, avgP, avgM };
+  }).sort((a, b) => b.n2 - a.n2 || a.nb - b.nb);
+  const top = rowsV[0];
+  $('sumAll').innerHTML = '종목 ' + tl.length + '개 · ' + (top && top.n2 ? '가장 고르게 나은 대안은 <b style="font-family:var(--font)">' + esc(top.v.name) + '</b>으로 ' + tl.length + '개 중 ' + top.n2 + '개에서 더 벌고 덜 빠졌습니다.' : '모든 종목에서 고르게 나은 대안은 없습니다.') + ' (주식 모드 기준 · CFD 증거금은 여기서 계산하지 않음)';
+  let h = '<table><thead><tr><th class="l">대안</th><th>더 벌고<br>덜 빠짐</th><th>물타기보다<br>못함</th><th>평균<br>수익률 차이</th><th>평균<br>낙폭 차이</th>' + tl.map(t => '<th>' + esc(tickLabel(t)) + '</th>').join('') + '</tr></thead><tbody>';
+  rowsV.forEach(x => { h += '<tr><td class="l"><span class="nm">' + esc(x.v.name) + '</span></td><td style="font-family:var(--mono)" class="' + (x.n2 >= tl.length * 0.6 ? 'good' : '') + '">' + x.n2 + '/' + tl.length + '</td><td style="font-family:var(--mono)" class="' + (x.nb >= tl.length * 0.5 ? 'bad' : '') + '">' + x.nb + '</td><td style="font-family:var(--mono)" class="' + (x.avgP > 0 ? 'good' : x.avgP < 0 ? 'bad' : '') + '">' + pct(x.avgP, 1, true) + 'p</td><td style="font-family:var(--mono)" class="' + (x.avgM < 0 ? 'good' : x.avgM > 0 ? 'bad' : '') + '">' + pct(x.avgM, 1, true) + 'p</td>' + x.cells.map(c => c ? '<td><span class="verdict ' + c.j.c + '" title="수익률 ' + pct(c.dP, 1, true) + 'p · 낙폭 ' + pct(c.dM, 1, true) + 'p">' + ({ g: '나음', w: c.dP > 0 ? '수익↑위험↑' : '수익↓위험↓', b: '못함', m: '비슷' })[c.j.c] + '</span></td>' : '<td>-</td>').join('') + '</tr>'; });
+  $('boardAll').innerHTML = h + '</tbody></table>';
 }
 
-/* ================= 연도별 ================= */
-function renderYearly(){
-  const sel = $('yTick'), ticks = Object.keys(RESULTS);
-  const prev = sel.value;
-  sel.innerHTML = ticks.map(t => '<option value="' + esc(t) + '">' + esc(tickLabel(t)) + '</option>').join('');
-  if (ticks.indexOf(prev) >= 0) sel.value = prev;
-  const t = sel.value; if (!t){ $('yearly').innerHTML = ''; return; }
-  const R = RESULTS[t], hold = R.hold, years = Object.keys(hold.yearly), diff = $('yMode').value === 'diff';
-  const strats = STRATS.filter(s => R[s.id]);
-  let h = '<table><thead><tr><th class="l">전략 \\ 연도</th>' + years.map(y => '<th>' + y + '</th>').join('') + '</tr></thead><tbody>';
-  strats.forEach(s => {
-    const r = R[s.id];
-    h += '<tr' + (s.base ? ' class="base"' : '') + '><td class="l">' + esc(s.name) + '</td>' + years.map(y => {
-      let v = r.yearly[y]; if (v == null) return '<td>-</td>';
-      if (diff && !s.base) v = v - hold.yearly[y];
-      const cls = v > 0.0005 ? 'good' : v < -0.0005 ? 'bad' : '';
-      return '<td class="mono ' + cls + '" style="' + (s.base && diff ? '' : cellColor(v / 2)) + '">' + (diff && !s.base ? spct(v, 0) : spct(v, 0)) + '</td>';
-    }).join('') + '</tr>';
+/* ---------- UI ---------- */
+function syncMode(){
+  const cfd = MODE === 'cfd';
+  document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.m === MODE));
+  $('cfdRow').hidden = !cfd; $('buyModeF').hidden = !cfd; $('sellModeF').hidden = !cfd;
+  const pts = cfd && $('buyMode').value === 'pts', usd = cfd && $('sellMode').value === 'usd';
+  $('buyPtsF').hidden = !pts; $('buyPctF').hidden = pts; $('sellUsdF').hidden = !usd; $('sellPctF').hidden = usd;
+  $('amountLab').textContent = cfd ? '회당 매수 랏 수' : '회당 매수 금액' + (TICK && isKS(TICK) ? ' (원)' : ' ($)');
+  $('tabAllBtn').hidden = false;
+}
+function applyDefaults(forMode){
+  if (forMode === 'cfd'){ $('amount').value = '1'; $('maxLots').value = '50'; $('buyMode').value = 'pts'; $('buyPts').value = '100'; $('fee').value = '0'; }
+  else { $('amount').value = TICK && isKS(TICK) ? '1,000,000' : '1,000'; $('maxLots').value = '10'; $('fee').value = TICK && isKS(TICK) ? '0.05' : '0.25'; }
+}
+function setMode(m, keep){
+  MODE = m; if (!keep) applyDefaults(m); syncMode(); schedule();
+}
+function renderTicks(){
+  $('tickChips').innerHTML = SAVED.map(e => '<span class="chip' + (e.t === TICK ? ' on' : '') + '" data-t="' + esc(e.t) + '">' + esc(e.name || e.t.toUpperCase()) + '</span>').join('');
+  $('tickChips').querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => { const prevKS = isKS(TICK); TICK = ch.dataset.t; renderTicks(); if (MODE === 'stock' && prevKS !== isKS(TICK)) applyDefaults('stock'); syncMode(); schedule(); }));
+}
+function loadPresets(){
+  let a = []; try { a = JSON.parse(localStorage.getItem('sbt.presets.v1') || '[]'); } catch (e) {}
+  if (!Array.isArray(a) || !a.length) return;
+  $('presetF').hidden = false;
+  $('preset').innerHTML = '<option value="">선택…</option>' + a.map((p, i) => '<option value="' + i + '">' + esc(p.name) + '</option>').join('');
+  $('preset').addEventListener('change', () => {
+    const p = a[parseInt($('preset').value, 10)]; if (!p || !p.v) return;
+    const v = p.v;
+    MODE = v.cfd ? 'cfd' : 'stock';
+    FIELDS.forEach(id => { if (v[id] == null || id === 'start' || id === 'end') return; const el = $(id); if (el.type === 'checkbox') el.checked = !!v[id]; else el.value = v[id]; });
+    TIERS = (v.tiers || []).map(t => ({ from: t.from, amt: t.amt }));
+    $('tiersHint').textContent = TIERS.length ? '차수별 금액 구간 ' + TIERS.length + '개가 기준 설정에 포함됩니다 (' + TIERS.map(t => t.from + '차수부터 ' + t.amt).join(', ') + ').' : '';
+    syncMode(); schedule();
   });
-  h += '</tbody></table>';
-  $('yearly').innerHTML = h;
 }
-
-/* ================= 카탈로그 ================= */
 function renderCards(){
-  $('cards').innerHTML = STRATS.map(s => '<div class="card"><h4><input type="checkbox" data-on="' + s.id + '"' + (ON[s.id] || s.base ? ' checked' : '') + (s.base ? ' disabled' : '') + '> ' + esc(s.name) + '<span class="tag">' + esc(s.group) + '</span></h4><p>' + esc(s.desc) + '</p><p class="src">출처: ' + esc(s.src) + '</p>' +
-    (s.params.length ? '<div class="params">' + s.params.map(p => '<label>' + esc(p.l) + '<input type="number" step="' + p.step + '" data-p="' + s.id + '.' + p.k + '" value="' + PARAMS[s.id][p.k] + '"></label>').join('') + '</div>' : '') + '</div>').join('');
-  $('cards').querySelectorAll('input[data-on]').forEach(el => el.addEventListener('change', () => { ON[el.dataset.on] = el.checked; schedule(); }));
-  $('cards').querySelectorAll('input[data-p]').forEach(el => el.addEventListener('change', () => { const [id, k] = el.dataset.p.split('.'); const v = parseFloat(el.value); if (isFinite(v) && v > 0){ PARAMS[id][k] = v; schedule(); } }));
+  $('cards').innerHTML = VARIANTS.map(v => '<div class="card"><h4><input type="checkbox" data-on="' + v.id + '"' + (VON[v.id] ? ' checked' : '') + '> ' + esc(v.name) + '</h4><div class="mute">' + esc(v.what) + '</div>' + (v.p.length ? '<div class="params">' + v.p.map(p => '<label>' + esc(p.l) + '<input type="number" step="any" data-p="' + v.id + '.' + p.k + '" value="' + VP[v.id][p.k] + '"></label>').join('') + '</div>' : '') + '</div>').join('');
+  $('cards').querySelectorAll('input[data-on]').forEach(el => el.addEventListener('change', () => { VON[el.dataset.on] = el.checked; schedule(); }));
+  $('cards').querySelectorAll('input[data-p]').forEach(el => el.addEventListener('change', () => { const [id, k] = el.dataset.p.split('.'); const n = parseFloat(el.value); if (isFinite(n)){ VP[id][k] = n; schedule(); } }));
 }
-function renderTickChips(){
-  $('tickChips').innerHTML = SAVED.map(e => '<span class="chip' + (TICKON[e.t] === false ? '' : ' on') + (LEV.test(e.t) ? ' lev' : '') + '" data-t="' + esc(e.t) + '" title="' + esc(e.t + ' ' + e.first + ' ~ ' + e.last) + '">' + esc(e.name || e.t.toUpperCase()) + '</span>').join('');
-  $('tickChips').querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => { const t = ch.dataset.t; TICKON[t] = TICKON[t] === false; ch.classList.toggle('on', TICKON[t] !== false); schedule(); }));
+let timer = null; function schedule(){ clearTimeout(timer); timer = setTimeout(compute, 120); }
+function saveState(){ try { localStorage.setItem('cmp.state.v1', JSON.stringify({ TICK, MODE, v: getVals(), VP, VON })); } catch (e) {} }
+function restoreState(){
+  try {
+    const s = JSON.parse(localStorage.getItem('cmp.state.v1') || 'null'); if (!s) return false;
+    TICK = s.TICK; MODE = s.MODE || 'stock';
+    FIELDS.forEach(id => { if (s.v && s.v[id] != null){ const el = $(id); if (el.type === 'checkbox') el.checked = !!s.v[id]; else el.value = s.v[id]; } });
+    TIERS = (s.v && s.v.tiers) || [];
+    Object.keys(s.VP || {}).forEach(id => { if (VP[id]) Object.assign(VP[id], s.VP[id]); }); Object.assign(VON, s.VON || {});
+    return true;
+  } catch (e) { return false; }
 }
+document.querySelectorAll('#modeSeg button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
+document.querySelectorAll('#sortSeg button').forEach(b => b.addEventListener('click', () => { SORT = b.dataset.k; document.querySelectorAll('#sortSeg button').forEach(x => x.classList.toggle('on', x === b)); renderBoard(); }));
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); const all = b.dataset.tab === 'all'; $('tabOne').hidden = all; $('tabAll').hidden = !all; if (all && !ALL) computeAll(); }));
+FIELDS.forEach(id => $(id).addEventListener('change', () => { syncMode(); ALL = null; schedule(); }));
+window.addEventListener('resize', () => { if (SEL && RESULT) renderDetail(SEL); });
 
-/* ================= 이벤트 ================= */
-let timer = null;
-function schedule(){ clearTimeout(timer); timer = setTimeout(compute, 150); }
-function syncUi(){
-  const p = $('period').value; $('fromF').hidden = $('toF').hidden = p !== 'custom';
-  const c = $('cost').value; $('feeF').hidden = $('taxF').hidden = c !== 'custom';
-}
-['period', 'fill', 'cost', 'from', 'to', 'fee', 'tax'].forEach(id => $(id).addEventListener('change', () => { syncUi(); schedule(); }));
-$('metric').addEventListener('change', () => { const ticks = Object.keys(RESULTS); renderBoard(ticks, STRATS.filter(s => ON[s.id] || s.base)); renderRank(); saveState(); });
-$('yTick').addEventListener('change', renderYearly); $('yMode').addEventListener('change', renderYearly);
-$('run').addEventListener('click', compute);
-window.addEventListener('resize', () => { if (SEL && RESULTS[SEL.t] && RESULTS[SEL.t][SEL.s]) renderDetail(SEL.t, SEL.s); });
-
-restoreState(); syncUi();
-$('metric2').innerHTML = $('metric').innerHTML; $('metric2').value = $('metric').value;
-$('metric2').addEventListener('change', () => { $('metric').value = $('metric2').value; $('metric').dispatchEvent(new Event('change')); });
-loadAll().then(() => {
-  if (!SAVED.length) throw new Error('저장된 종목 데이터가 없습니다. data/ 폴더를 확인해 주세요.');
-  if (!$('from').value){ const f = SAVED.map(e => e.first).sort(); $('from').value = f[f.length - 1]; }
-  if (!$('to').value) $('to').value = SAVED.map(e => e.last).sort().pop();
-  renderTickChips(); renderCards(); compute();
-}).catch(e => { $('err').textContent = e.message; $('board').innerHTML = ''; });
+loadIndex().then(() => {
+  if (!SAVED.length) throw new Error('저장된 종목 데이터가 없습니다.');
+  const had = restoreState();
+  if (!TICK || !SAVED.find(e => e.t === TICK)){ TICK = SAVED.find(e => e.t.toUpperCase() === '^NDX') ? '^NDX' : SAVED[0].t; MODE = TICK.toUpperCase() === '^NDX' ? 'cfd' : 'stock'; applyDefaults(MODE); }
+  if (!had){ /* 기존 앱의 CFD 값이 있으면 가져옴 */
+    try { const c = JSON.parse(localStorage.getItem('sbt.cfd.v2') || 'null'); if (c){ if (c.bal) $('cfdBal').value = c.bal; if (c.lev) $('cfdLev').value = c.lev; if (c.so) $('cfdSo').value = c.so; if (c.pv) $('cfdPv').value = c.pv; $('cfdWd').checked = !!c.wd; } } catch (e) {}
+  }
+  renderTicks(); renderCards(); loadPresets(); syncMode(); compute();
+}).catch(e => { $('err').textContent = e.message; });
 </script>
 </body>
 </html>
