@@ -86,6 +86,38 @@ canvas{width:100%;height:auto;display:block}
 details summary{cursor:pointer;color:var(--accent);font-size:13px}
 .trades td,.trades th{padding:3px 7px;font-size:12px}
 .note{font-size:12.5px;color:var(--muted);line-height:1.6}
+.viewtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.viewtabs button{padding:8px 14px;font-weight:600}
+.viewtabs button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.rank{display:flex;flex-direction:column;gap:8px}
+.rk{display:grid;grid-template-columns:30px 1fr;gap:2px 10px;align-items:start;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--bg);cursor:pointer}
+.rk>*{grid-column:2}
+.rk .money{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.rk .money b{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--fg)}
+.rk .money b.bad{color:var(--bad)} .rk .money b.good{color:var(--good)}
+.rk .cmp{font-size:13px;margin-top:2px}
+.rk .cmp b{font-family:var(--mono);font-weight:500}
+.rk .verdict{margin-top:6px;font-size:13.5px}
+.rk:hover{outline:2px solid var(--accent);outline-offset:-2px}
+.rk.sel{outline:2px solid var(--fg);outline-offset:-2px}
+.rk.base{border-style:dashed}
+.rk .no{grid-column:1;grid-row:1/span 6;font-family:var(--mono);font-size:18px;color:var(--muted);text-align:center;padding-top:4px}
+.rk .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.rk .nm{font-weight:600;font-size:15px}
+.rk .nm small{font-weight:400;color:var(--muted);font-size:12px;margin-left:6px}
+.rk .big{font-family:var(--mono);font-size:20px;font-weight:600}
+.rk .bars{display:grid;grid-template-columns:auto 1fr auto;gap:4px 8px;align-items:center;font-size:12px;color:var(--muted);margin-top:6px}
+.rk .bar{height:10px;background:var(--chip);border-radius:5px;position:relative;overflow:hidden}
+.rk .bar i{position:absolute;top:0;bottom:0;left:0;border-radius:5px}
+.rk .bar i.g{background:var(--good)} .rk .bar i.b{background:var(--bad)} .rk .bar i.m{background:var(--muted)}
+.rk .bar em{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--fg);opacity:.7}
+.rk .v{font-family:var(--mono);min-width:5.5em;text-align:right;color:var(--fg)}
+.rk .verdict{font-size:12.5px;color:var(--muted)}
+.rk .verdict.good{color:var(--good)} .rk .verdict.bad{color:var(--bad)}
+.subhead{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:10px}
+.subhead .chips{flex:1}
+.sum{font-size:13.5px;margin:0 0 10px;padding:10px 12px;border-left:3px solid var(--accent);background:var(--bg);border-radius:0 8px 8px 0}
+@media (max-width:600px){.rk .big{font-size:18px}.rk .nm{font-size:14px}}
 .pill{display:inline-block;padding:1px 7px;border-radius:999px;background:var(--chip);font-size:11px;color:var(--muted);margin-left:6px}
 </style>
 <body>
@@ -122,9 +154,9 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
       </select></div>
     <div class="field" id="feeF" hidden><label for="fee">편도 수수료 (%)</label><input type="number" id="fee" value="0.1" step="any" min="0"></div>
     <div class="field" id="taxF" hidden><label for="tax">매도세 (%)</label><input type="number" id="tax" value="0" step="any" min="0"></div>
-    <div class="field"><label for="metric">성적표 숫자</label>
+    <div class="field" id="metricF" hidden><label for="metric">전체 표 숫자</label>
       <select id="metric">
-        <option value="cagr">연환산 수익률</option>
+        <option value="cagr">연환산 수익률 (기본)</option>
         <option value="total">총 수익률</option>
         <option value="excess">보유 대비 초과 (연환산)</option>
         <option value="mdd">최대 낙폭</option>
@@ -143,7 +175,25 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
 </div>
 
 <div class="panel">
+  <div class="viewtabs" role="tablist">
+    <button class="on" data-view="byTick">종목별 전략 순위</button>
+    <button data-view="byStrat">전략별 종목 결과</button>
+    <button data-view="matrix">전체 표</button>
+  </div>
+  <div id="vByTick">
+    <div class="subhead"><span class="hint" style="margin:0">종목을 고르세요</span><div class="chips" id="rkTick"></div></div>
+    <p class="sum" id="rkSum"></p>
+    <div class="rank" id="rank"></div>
+    <p class="hint" style="margin-top:10px">막대의 세로선은 "그냥 들고 있었을 때"입니다. 초록 = 그보다 많이 남김, 빨강 = 적게 남김. "최악일 때"는 중간에 고점 대비 가장 많이 빠졌던 비율이고 짧을수록 좋습니다. 항목을 누르면 아래에 상세가 열립니다.</p>
+  </div>
+  <div id="vByStrat" hidden>
+    <div class="subhead"><span class="hint" style="margin:0">전략을 고르세요</span><div class="chips" id="rkStrat"></div></div>
+    <p class="sum" id="rkSum2"></p>
+    <div class="rank" id="rank2"></div>
+  </div>
+  <div id="vMatrix" hidden>
   <h2>전략 × 종목 성적표</h2>
+  <div class="row" style="margin-bottom:10px"><div class="field"><label for="metric2">표에 보일 숫자</label><select id="metric2"></select></div></div>
   <div class="tablewrap" id="board"><p class="hint" style="padding:14px">데이터를 불러오는 중…</p></div>
   <div class="legend">
     <span><i style="background:var(--good)"></i>매수 후 보유보다 나음</span>
@@ -151,6 +201,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
     <span>색 진하기 = 연환산 초과 수익 크기 · 작은 글씨 = 최대 낙폭 · 셀을 누르면 상세</span>
   </div>
   <p class="note" style="margin-top:8px">읽는 법: 숫자가 커도 <b>보유보다 못하면</b> 그 전략은 그 종목에서 가치를 더하지 못한 것입니다. 레버리지 상품은 보유 자체가 변동성 손실로 불리해서 거의 모든 전략이 초록으로 나오기 쉬우니, 낙폭과 연도별 표를 같이 보세요. 전략 10개 × 종목 10개 = 100칸 중 몇 칸은 우연히 좋게 나옵니다. 한 칸만 보고 결론 내리지 말고 <b>후반 절반</b>과 <b>이웃 매개변수</b>에서도 유지되는지 확인하세요.</p>
+  </div>
 </div>
 
 <div class="panel" id="detailPanel" hidden>
@@ -463,7 +514,7 @@ function restoreState(){
 }
 
 /* ================= 계산 (비동기 분할) ================= */
-let RESULTS = {}, RANGE = {}, RUNID = 0, SEL = null;
+let RESULTS = {}, RANGE = {}, RUNID = 0, SEL = null, VIEW = 'byTick', RK_T = null, RK_S = 'avgdown';
 function costFor(t){
   const m = $('cost').value;
   if (m === 'zero') return { fee: 0, tax: 0 };
@@ -511,7 +562,7 @@ async function compute(){
   prog.style.display = 'none'; RESULTS = res;
   const f = use.map(t => DATA[t][RANGE[t].start].d), l = use.map(t => DATA[t][RANGE[t].end].d);
   $('periodHint').textContent = mode === 'full' ? '종목별 전체 기간 (시작일이 달라 서로 직접 비교는 피하세요)' : '계산 구간 ' + f.sort()[0] + ' ~ ' + l.sort().pop() + (mode === 'common' ? ' · 가장 늦게 시작한 종목에 맞춘 공통 구간' : '');
-  renderBoard(use, strats); renderYearly(); if (SEL && res[SEL.t] && res[SEL.t][SEL.s]) renderDetail(SEL.t, SEL.s); else { $('detailPanel').hidden = true; }
+  renderBoard(use, strats); renderRank(); renderYearly(); if (SEL && res[SEL.t] && res[SEL.t][SEL.s]) renderDetail(SEL.t, SEL.s); else { $('detailPanel').hidden = true; }
   saveState();
 }
 
@@ -547,8 +598,87 @@ function renderBoard(ticks, strats){
   });
   h += '</tbody></table>';
   $('board').innerHTML = h;
-  $('board').querySelectorAll('td.cell[data-t]').forEach(td => td.addEventListener('click', () => { SEL = { t: td.dataset.t, s: td.dataset.s }; renderBoard(ticks, strats); renderDetail(SEL.t, SEL.s); $('detailPanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+  $('board').querySelectorAll('td.cell[data-t]').forEach(td => td.addEventListener('click', () => { SEL = { t: td.dataset.t, s: td.dataset.s }; renderBoard(ticks, strats); renderRank(); renderDetail(SEL.t, SEL.s); $('detailPanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
 }
+
+/* ================= 순위 보기 ================= */
+function verdict(r, hold, isBase){
+  if (isBase) return ['기준선', ''];
+  const ex = r.cagr - hold.cagr;
+  const t = '최악일 때 ' + pct(r.mdd, 0) + '까지 빠짐 (그냥 보유는 ' + pct(hold.mdd, 0) + ')';
+  if (ex > 0.005 && r.h2 >= hold.h2) return ['통했음 — 앞 절반과 뒤 절반 모두 보유를 이김. ' + t, 'good'];
+  if (ex > 0.005) return ['반만 통했음 — 앞 시기엔 좋았지만 최근 절반에선 보유보다 못함. ' + t, ''];
+  if (r.mdd > hold.mdd + 0.1 && r.cagr > 0) return ['돈은 덜 벌었지만 떨어질 때 훨씬 덜 떨어짐. ' + t, ''];
+  return ['안 통했음 — 그냥 들고 있는 게 나았음. ' + t, 'bad'];
+}
+function won(x){ /* 100으로 시작했을 때의 최종 금액 */ const v = x * 100; return v >= 1000 ? Math.round(v).toLocaleString('ko-KR') : v.toFixed(v >= 100 ? 0 : 1); }
+function rankItem(no, title, sub, r, hold, isBase, data){
+  const fin = r.eq[r.eq.length - 1], hf = hold.eq[hold.eq.length - 1];
+  const scale = Math.max(fin, hf, 1.2);
+  const w = Math.min(100, fin / scale * 100), hx = Math.min(100, hf / scale * 100), one = Math.min(100, 1 / scale * 100);
+  const ddw = Math.min(100, Math.abs(r.mdd) * 100), hdd = Math.min(100, Math.abs(hold.mdd) * 100);
+  const vd = verdict(r, hold, isBase);
+  const cls = isBase ? 'm' : (fin >= hf ? 'g' : 'b');
+  const ratio = fin / hf;
+  let cmp = '';
+  if (!isBase){
+    if (ratio >= 1.02) cmp = '그냥 들고 있었을 때(' + won(hf) + ')보다 <b class="good">' + (ratio >= 2 ? ratio.toFixed(1) + '배' : '+' + ((ratio - 1) * 100).toFixed(0) + '%') + '</b> 더 남음';
+    else if (ratio <= 0.98) cmp = '그냥 들고 있었을 때(' + won(hf) + ')의 <b class="bad">' + (ratio * 100).toFixed(0) + '%</b>만 남음';
+    else cmp = '그냥 들고 있었을 때(' + won(hf) + ')와 비슷함';
+  }
+  return '<div class="rk' + (isBase ? ' base' : '') + (SEL && SEL.t === data.t && SEL.s === data.s ? ' sel' : '') + '" data-t="' + esc(data.t) + '" data-s="' + data.s + '">' +
+    '<div class="no">' + (isBase ? '<span style="font-size:11px;font-family:var(--font)">기준</span>' : no) + '</div>' +
+    '<div class="top"><span class="nm">' + esc(title) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span></div>' +
+    '<div class="money">100으로 시작 → <b class="' + (fin >= 1 ? (isBase ? '' : (fin >= hf ? 'good' : '')) : 'bad') + '">' + won(fin) + '</b><span>(' + r.yrs.toFixed(0) + '년, 연 ' + spct(r.cagr) + ')</span></div>' +
+    (cmp ? '<div class="cmp">' + cmp + '</div>' : '') +
+    '<div class="bars">' +
+      '<span>최종 금액</span><div class="bar"><i class="' + cls + '" style="width:' + w + '%"></i><em style="left:' + one + '%;opacity:.3"></em><em style="left:' + hx + '%"></em></div><span class="v">' + won(fin) + '</span>' +
+      '<span>최악일 때</span><div class="bar"><i class="m" style="width:' + ddw + '%;opacity:.5"></i><em style="left:' + hdd + '%"></em></div><span class="v">' + pct(r.mdd, 0) + '</span>' +
+    '</div>' +
+    '<div class="verdict ' + vd[1] + '">' + vd[0] + '</div>' +
+  '</div>';
+}
+function bindRank(host){
+  host.querySelectorAll('.rk').forEach(el => el.addEventListener('click', () => { SEL = { t: el.dataset.t, s: el.dataset.s }; renderRank(); renderDetail(SEL.t, SEL.s); $('detailPanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+}
+function renderRank(){
+  const ticks = Object.keys(RESULTS), m = $('metric').value, strats = STRATS.filter(s => ON[s.id] || s.base);
+  if (!ticks.length){ $('rank').innerHTML = ''; $('rank2').innerHTML = ''; return; }
+  if (!RK_T || ticks.indexOf(RK_T) < 0) RK_T = ticks.indexOf('^NDX') >= 0 ? '^NDX' : ticks[0];
+  if (!STRATS.find(s => s.id === RK_S && (ON[s.id] || s.base))) RK_S = strats.find(s => !s.base) ? strats.find(s => !s.base).id : 'hold';
+  $('rkTick').innerHTML = ticks.map(t => '<span class="chip' + (t === RK_T ? ' on' : '') + (LEV.test(t) ? ' lev' : '') + '" data-t="' + esc(t) + '">' + esc(tickLabel(t)) + '</span>').join('');
+  $('rkTick').querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => { RK_T = ch.dataset.t; renderRank(); }));
+  $('rkStrat').innerHTML = strats.filter(s => !s.base || s.id === 'dca').map(s => '<span class="chip' + (s.id === RK_S ? ' on' : '') + '" data-s="' + s.id + '">' + esc(s.name) + '</span>').join('');
+  $('rkStrat').querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => { RK_S = ch.dataset.s; renderRank(); }));
+  /* 종목별 */
+  const R = RESULTS[RK_T], hold = R.hold, rg = RANGE[RK_T], b = DATA[RK_T];
+  const list = strats.filter(s => R[s.id]).map(s => ({ s, r: R[s.id], v: R[s.id].eq[R[s.id].eq.length - 1] })).filter(x => !x.s.base);
+  list.sort((a, c) => c.v - a.v);
+  const beat = list.filter(x => x.r.cagr > hold.cagr).length, best = list[0];
+  const hf = hold.eq[hold.eq.length - 1];
+  $('rkSum').innerHTML = '<b>' + esc(tickLabel(RK_T)) + '</b>을(를) ' + b[rg.start].d.slice(0, 4) + '년부터 ' + b[rg.end].d.slice(0, 4) + '년까지 <b>그냥 들고 있었다면 100 → ' + won(hf) + '</b> (중간에 최대 ' + pct(hold.mdd, 0) + ' 빠짐).<br>' +
+    '같은 돈으로 전략을 썼다면 아래와 같습니다. ' + (beat ? '전략 ' + list.length + '개 중 <b>' + beat + '개</b>가 보유보다 많이 남겼고, 1위는 <b>' + esc(best.s.name) + '</b>입니다.' : '전략 ' + list.length + '개 중 보유보다 많이 남긴 것이 <b>없습니다</b>.');
+  let h = rankItem(0, '매수 후 보유', '기준선', hold, hold, true, { t: RK_T, s: 'hold' });
+  list.forEach((x, i) => { h += rankItem(i + 1, x.s.name, x.s.group, x.r, hold, false, { t: RK_T, s: x.s.id }); });
+  $('rank').innerHTML = h; bindRank($('rank'));
+  /* 전략별 */
+  const st = STRATS.find(s => s.id === RK_S);
+  const l2 = ticks.filter(t => RESULTS[t][RK_S]).map(t => ({ t, r: RESULTS[t][RK_S], hold: RESULTS[t].hold })).map(x => Object.assign(x, { v: x.r.eq[x.r.eq.length - 1] / x.hold.eq[x.hold.eq.length - 1] }));
+  l2.sort((a, c) => c.v - a.v);
+  const beat2 = l2.filter(x => x.r.cagr > x.hold.cagr).length;
+  $('rkSum2').innerHTML = '<b>' + esc(st.name) + '</b> 전략은 종목 ' + l2.length + '개 중 <b>' + beat2 + '개</b>에서 그냥 들고 있는 것보다 많이 남겼습니다.' + (beat2 >= l2.length * 0.7 ? ' 여러 시장에서 고르게 통한 편입니다.' : beat2 <= l2.length * 0.3 ? ' 대부분의 종목에서 그냥 보유만 못했습니다.' : ' 종목에 따라 갈립니다.');
+  let h2 = '';
+  l2.forEach((x, i) => { h2 += rankItem(i + 1, tickLabel(x.t), (LEV.test(x.t) ? '레버리지 · ' : '') + '보유 ' + spct(x.hold.cagr), x.r, x.hold, false, { t: x.t, s: RK_S }); });
+  $('rank2').innerHTML = h2; bindRank($('rank2'));
+}
+function setView(v){
+  VIEW = v;
+  document.querySelectorAll('.viewtabs button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  $('vByTick').hidden = v !== 'byTick'; $('vByStrat').hidden = v !== 'byStrat'; $('vMatrix').hidden = v !== 'matrix';
+  try { localStorage.setItem('sv.view', v); } catch (e) {}
+}
+document.querySelectorAll('.viewtabs button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+try { setView(localStorage.getItem('sv.view') || 'byTick'); } catch (e) {}
 
 /* ================= 상세 ================= */
 function renderDetail(t, sid){
@@ -656,12 +786,14 @@ function syncUi(){
   const c = $('cost').value; $('feeF').hidden = $('taxF').hidden = c !== 'custom';
 }
 ['period', 'fill', 'cost', 'from', 'to', 'fee', 'tax'].forEach(id => $(id).addEventListener('change', () => { syncUi(); schedule(); }));
-$('metric').addEventListener('change', () => { const ticks = Object.keys(RESULTS); renderBoard(ticks, STRATS.filter(s => ON[s.id] || s.base)); saveState(); });
+$('metric').addEventListener('change', () => { const ticks = Object.keys(RESULTS); renderBoard(ticks, STRATS.filter(s => ON[s.id] || s.base)); renderRank(); saveState(); });
 $('yTick').addEventListener('change', renderYearly); $('yMode').addEventListener('change', renderYearly);
 $('run').addEventListener('click', compute);
 window.addEventListener('resize', () => { if (SEL && RESULTS[SEL.t] && RESULTS[SEL.t][SEL.s]) renderDetail(SEL.t, SEL.s); });
 
 restoreState(); syncUi();
+$('metric2').innerHTML = $('metric').innerHTML; $('metric2').value = $('metric').value;
+$('metric2').addEventListener('change', () => { $('metric').value = $('metric2').value; $('metric').dispatchEvent(new Event('change')); });
 loadAll().then(() => {
   if (!SAVED.length) throw new Error('저장된 종목 데이터가 없습니다. data/ 폴더를 확인해 주세요.');
   if (!$('from').value){ const f = SAVED.map(e => e.first).sort(); $('from').value = f[f.length - 1]; }
